@@ -46,7 +46,9 @@ export function DashboardPage() {
       });
   }, []);
 
-  const isStaff = user?.role === "admin" || user?.role === "analyst";
+  /* Alineado con /dashboard/kpis: admin, analyst y fiduciary comparten KPIs de cartera global. */
+  const showsPlatformKpis =
+    user?.role === "admin" || user?.role === "analyst" || user?.role === "fiduciary";
 
   return (
     <div className="f-page">
@@ -58,7 +60,7 @@ export function DashboardPage() {
       </div>
       {err && <p className="text-sm text-red-600">{err}</p>}
 
-      {isStaff && (
+      {showsPlatformKpis && (
         <div className="f-kpi-grid">
           <KpiCard title="KYC pendiente" value={k?.kyc_pending ?? 0} hint="Empresas en revisión" />
           <KpiCard title="Operaciones abiertas" value={k?.open_operations ?? 0} />
@@ -71,7 +73,7 @@ export function DashboardPage() {
         </div>
       )}
 
-      {!isStaff && (
+      {!showsPlatformKpis && (
         <>
           <div className="f-kpi-grid">
             <KpiCard title="Mis facturas" value={k?.my_invoices ?? 0} />

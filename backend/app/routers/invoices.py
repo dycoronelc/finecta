@@ -32,8 +32,8 @@ def list_invoices(
     status: str | None = None,
     q: str | None = None,
     company_id: int | None = None,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(2000, ge=1, le=10_000, description="Máximo de filas (paginación con offset)"),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ) -> list[Invoice]:
