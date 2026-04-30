@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import loginFondoUrl from "../assets/fondoFinecta.png";
 
 const DEMO_ACCOUNTS: { email: string; password: string; role: string }[] = [
   { email: "admin@finecta.com", password: "Admin123!", role: "Admin" },
@@ -47,14 +48,17 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen w-full min-w-0 flex flex-col lg:flex-row">
-      <div className="hidden lg:flex lg:w-1/2 min-h-0 relative overflow-hidden flex-col">
-        <div
-          className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: "url('/fondoFinecta.png')" }}
+      <div className="hidden lg:flex lg:w-1/2 lg:min-h-screen min-h-0 relative overflow-hidden flex-col self-stretch">
+        <img
+          src={loginFondoUrl}
+          alt=""
+          decoding="async"
+          fetchPriority="low"
+          className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover object-center select-none"
           aria-hidden
         />
         <div
-          className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-900/80 via-zinc-900/70 to-black/85"
+          className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-br from-violet-900/45 via-zinc-900/50 to-black/70"
           aria-hidden
         />
         <div className="relative z-10 flex flex-1 flex-col justify-between p-8 lg:p-12 text-white min-h-0">
