@@ -47,16 +47,27 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen w-full min-w-0 flex flex-col lg:flex-row">
-      <div className="hidden lg:flex lg:w-1/2 min-h-0 bg-gradient-to-br from-violet-900 via-zinc-900 to-black p-8 lg:p-12 text-white flex-col justify-between">
-        <div>
-          <img src="/logo.png" alt="" className="h-10 w-auto mb-8 opacity-90" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-          <h1 className="text-3xl font-bold tracking-tight">Factoring seguro y transparente</h1>
-          <p className="mt-4 text-zinc-300 max-w-md text-sm leading-relaxed">
-            Digitalice el ciclo de cesión de facturas, contratos y cobros con un panel
-            construido para equipos financieros.
-          </p>
+      <div className="hidden lg:flex lg:w-1/2 min-h-0 relative overflow-hidden flex-col">
+        <div
+          className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{ backgroundImage: "url('/fondoFinecta.png')" }}
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-900/80 via-zinc-900/70 to-black/85"
+          aria-hidden
+        />
+        <div className="relative z-10 flex flex-1 flex-col justify-between p-8 lg:p-12 text-white min-h-0">
+          <div>
+            <img src="/logo.png" alt="" className="h-10 w-auto mb-8 opacity-90" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            <h1 className="text-3xl font-bold tracking-tight drop-shadow-sm">Factoring seguro y transparente</h1>
+            <p className="mt-4 text-zinc-200 max-w-md text-sm leading-relaxed drop-shadow-sm">
+              Digitalice el ciclo de cesión de facturas, contratos y cobros con un panel
+              construido para equipos financieros.
+            </p>
+          </div>
+          <p className="text-xs text-zinc-400 drop-shadow-sm">Finecta — Plataforma Financiera</p>
         </div>
-        <p className="text-xs text-zinc-500">Finecta — Plataforma Financiera</p>
       </div>
       <div className="flex-1 w-full min-w-0 flex items-center justify-center p-4 sm:p-6 bg-zinc-100">
         <div className="w-full max-w-md min-w-0 space-y-4">
