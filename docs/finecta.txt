@@ -1,0 +1,234 @@
+https://www.viafirma.do/
+
+
+Actúa como experto en factoring, riesgo financiero y automatización. La empresa Finecta nos contrató para que le desarrollemos una plataforma para el proceso de factoring digital que va a ser el servicio que ellos van a prestar en República Dominicana. Inicialmente, las empresas que generan las facturas se deben conectar con Finecta, o bien Finecta se conecta con ellas para ofrecer el servicio. Se debe hacer una validación KYC para verificar que el cliente no tiene ningún problema financiero y se hace una activación digital con un contrato marco que te lo comparto en el archivo llamado "Acuerdo Marco de sesión de crédito y derechos.pdf". Este acuerdo debe firmarse entre la empresa que hace las facturas y Finecta de forma electrónica utilizando los servicios de una empresa llamada ViaFirma (https://www.viafirma.do/). Una vez que ya se ha firmado el contrato, la empresa que emite la factura le envía estas facturas en una primera fase por correo a Finecta. 
+Luego, Finecta analiza las facturas y verifica con el pagador de estas facturas, que en este caso se llama Ritmo, que las facturas existen. Esta verificación se puede hacer a través de un archivo de Excel que la empresa Ritmo va a enviar a Finecta. Entonces, le cotiza a la empresa que emite la factura cuánto le va a cobrar por gasto de operación y el porcentaje de que se va a quedar Finecta por ejecutar el factoring. De llegarse un acuerdo se crea otro contrato llamado de Cesión que te comparto en el archivo llamado "Contrato de Cesión.pdf". Este contrato también debe ser firmado de forma electrónica utilizando los servicios de ViaFirma. Una vez firmado el contrato de cesión, se debe confirmar la operación con el pagador (RITMO), el cual debería cambiar el nombre a quien está dirigida la factura ya que debe cambiar del creador de la factura y pasas a nombre de Finecta. Para esto se genera un documento que te comparto llamado "Confirmación de la Operación.pdf". Realizada esta confirmación, Finecta procede a desembolsar el dinero por la compra de las facturas al generador de la factura y luego toca esperar que Ritmo le cancele estas facturas a Finecta. Esto, por supuesto, genera varios estados en cada uno de los trámites, que son desde que se hace la activación digital del cliente hasta el final, que ya es el cobro como tal de cada una de las facturas.  Adicionalmente, te comparto un archivo llamado "proceso.png", que es una imagen que muestra todo este flujo, y un archivo PDF llamado "roadmap.pdf", que también tiene una descripción un poco más detallada del flujo. Analiza toda esta información y ayúdame por favor a preparar una oferta técnica con todos los componentes que tendríamos que utilizar, tiempos de desarrollo en fases, componentes a utilizar e incluso el prompt para colocarlo en cursor o en bolt.new que me permita crear la plataforma como un prototipo para poderlo presentar. El dideño base para crear este desarrollo lo tenemos en un figma en la dirección https://www.figma.com/proto/mFZQBNMR1ceFjqDKzyP2Fg/Finecta---RD-Webpage?node-id=61-1559&t=f0HzcdtxJvsdZ2ye-1&scaling=scale-down-width&content-scaling=fixed&page-id=0%3A1&starting-point-node-id=61%3A1559
+
+
+
+Create a full-stack web application for a digital factoring platform (Fintech).
+
+Tech stack:
+- Frontend: React + Vite + Tailwind
+- Backend: FastAPI (Python)
+- Database: MySQL
+- ORM: SQLAlchemy
+
+Architecture:
+- Modular backend (routers, services, models)
+- REST API with OpenAPI docs
+- Clean UI based on dashboard style
+
+User Roles:
+1. Admin (Finecta)
+2. Analyst (Finecta operations)
+3. Client (invoice issuer)
+4. Fiduciary (future role - financial trustee)
+5. Payer (future role)
+
+Core Modules:
+
+1. Authentication
+- JWT login
+- Role-based access control
+
+2. Company Onboarding
+- Register company
+- Upload documents
+- KYC status tracking
+- Approval workflow
+
+3. Contracts
+- Generate:
+  - "Contrato Marco"
+  - "Contrato de Cesión"
+  - "Confirmación de Operación"
+- Store documents
+- Track signature status
+
+4. Invoice Management
+- Upload invoice (PDF)
+- Extract:
+  - invoice_number
+  - issuer
+  - payer
+  - amount
+  - due_date
+- Status lifecycle
+
+5. Payer / ERP Validation Module
+- Initial phase:
+  - Upload Excel file from payer
+  - Match invoices automatically
+  - Detect discrepancies:
+    - missing invoice
+    - amount mismatch
+    - duplicated invoice
+    - invalid payer
+- Future phase:
+  - Prepare integration layer for payer ERP
+  - Initial ERP target: Odoo
+  - Create placeholder services/endpoints for:
+    - validating invoice existence
+    - checking invoice amount
+    - checking due date
+    - checking approval status
+    - checking payment status
+- Integration options:
+  - REST API
+  - Odoo JSON-RPC
+  - n8n connector
+  - middleware integration service
+
+6. Quotations
+- Calculate factoring fees:
+  - commission
+  - operational cost
+- Accept / reject by client
+
+7. Factoring Operations
+- Create operation
+- Link invoices
+- Track lifecycle
+
+8. Disbursement
+- Register payment to client
+- Track status
+
+9. Collections
+- Track payer payments
+- Close operation
+
+10. Fiduciary Module (prepare but minimal UI)
+- View operations
+- Validate transactions
+- Track custody status
+- Placeholder endpoints for future integrations
+
+UI Requirements:
+- Dashboard per role
+- Tables with filters
+- Status badges
+- Timeline view per operation
+- Clean fintech design
+
+Extra Features:
+- Prepare webhook endpoints for n8n integration
+- Prepare endpoints for ViaFirma integration
+- Modular services for future AI integration
+
+Database:
+- Design relational schema with:
+  - companies
+  - users
+  - invoices
+  - operations
+  - quotations
+  - contracts
+  - disbursements
+  - payments
+
+Code Quality:
+- Clean architecture
+- Separation of concerns
+- Reusable components
+- Environment-based configuration
+
+Goal:
+Deliver a working prototype that demonstrates the full factoring lifecycle from onboarding to collection.
+
+UI/UX Design Requirements (CRITICAL):
+
+The UI must closely follow the design style from the provided Figma prototype:
+https://www.figma.com/proto/mFZQBNMR1ceFjqDKzyP2Fg/Finecta---RD-Webpage
+I'm sharing the logo file (logo.png) located in the docs folder at the root of the project.
+The system must be in Spanish.
+
+Design style:
+- Modern fintech UI
+- Clean, minimal, professional
+- High use of whitespace
+- Soft shadows and rounded cards
+- Dashboard-centric layout
+
+Color System (inspired by Figma):
+- Primary: Deep dark (for sidebar/header)
+- Secondary: Orange accent for actions (buttons, highlights)
+- Background: Light gray / off-white
+- Text: Dark gray / near black
+- Success: Green
+- Warning: Amber
+- Error: Red
+
+Typography:
+- Sans-serif modern font (Inter or similar)
+- Clear hierarchy:
+  - Titles: bold, large
+  - Subtitles: medium
+  - Body: regular
+  - Labels: small, muted
+
+Layout:
+- Left sidebar navigation (fixed)
+- Top header with user info and notifications
+- Main content as dashboard panels
+- Responsive grid layout
+
+Core UI Components:
+- Sidebar with icons + labels
+- Top navbar
+- Dashboard cards (KPIs)
+- Data tables with:
+  - filters
+  - sorting
+  - pagination
+- Status badges:
+  - color-coded by state
+- Forms:
+  - clean inputs
+  - step-based onboarding (wizard)
+- Timeline / activity log per operation
+- Modal dialogs for confirmations
+
+Interaction Style:
+- Smooth hover effects
+- Subtle animations (no heavy motion)
+- Clear call-to-action buttons
+- Feedback states (loading, success, error)
+
+Pages to prioritize:
+1. Dashboard
+2. Onboarding flow (multi-step)
+3. Invoice list
+4. Operation detail (timeline view)
+5. Contracts view
+6. Validation screen (Excel/API results)
+
+IMPORTANT:
+- Do NOT create generic UI
+- Follow fintech dashboard patterns
+- Use consistent spacing and alignment
+- Keep UI visually close to Figma reference
+
+Optional:
+- Use TailwindCSS for styling
+- Use component abstraction (cards, badges, tables)
+
+Figma Interpretation Rules:
+
+- Recreate layout proportions similar to Figma
+- Use card-based sections instead of full-width blocks
+- Keep margins and padding consistent (8px or 16px spacing system)
+- Use rounded corners (8px–16px)
+- Avoid default browser styles
+- Prefer visually grouped content over plain lists
+
+Branding:
+- Apply a premium fintech look
+- Combine dark sidebar + light content area
+- Use orange as accent for primary actions
+- Maintain a professional corporate tone
+
+UX Goal:
+The platform should feel like:
+"Secure, reliable, financial-grade software"

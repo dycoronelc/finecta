@@ -1,0 +1,9 @@
+node_modules/
+dist/
+backend/.venv/
+backend/uploads/
+backend/finecta_dev.db
+backend/finecta_dev.db-journal
+.env
+**/__pycache__/
+*.pyc

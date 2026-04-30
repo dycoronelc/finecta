@@ -1,0 +1,41 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-zinc-100 text-zinc-900 font-sans antialiased;
+  }
+}
+
+@layer components {
+  .f-kpi-grid {
+    display: grid;
+    width: 100%;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  }
+  .f-data-shell {
+    @apply w-full min-w-0 overflow-x-auto;
+  }
+  .f-page {
+    @apply w-full min-w-0 max-w-full space-y-4 md:space-y-6;
+  }
+  .f-panel {
+    @apply rounded-2xl bg-white shadow-card p-4 md:p-5 border border-zinc-200/80;
+  }
+  .f-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500/30 disabled:opacity-50;
+  }
+  .f-btn-primary {
+    @apply f-btn bg-finecta-accent text-white hover:bg-finecta-accent-hover;
+  }
+  .f-btn-ghost {
+    @apply f-btn text-zinc-600 hover:bg-zinc-100;
+  }
+  .f-input {
+    @apply w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-400 focus:border-orange-400 focus:ring-2 focus:ring-orange-500/20 outline-none;
+  }
+}
