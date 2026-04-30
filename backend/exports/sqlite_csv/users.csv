@@ -1,0 +1,7 @@
+id,email,hashed_password,full_name,role,is_active,company_id,created_at
+1,admin@finecta.com,$2b$12$QMRBIvxtN6o4hrTdvlZi7eMP1l4HS8WvMzCiE3H.9fGisdr3XDyGC,Admin Finecta,admin,1,1,2026-04-29 21:41:36
+2,analista@finecta.com,$2b$12$0x.vki97KB9mA5vc0TOYquzUpTQ2nhMHlqiXztOjYg5jJK1RlE//q,Ana Lista,analyst,1,1,2026-04-29 21:41:36
+3,fiduciario@finecta.com,$2b$12$TV9CvR8sckU/b4U9h0akluLdVRi6Ii1p2.TMrTQ5ML55mqZ6NmvPu,Fid. Seguro,fiduciary,1,1,2026-04-29 21:41:36
+4,pagador@empresa.com,$2b$12$nI/dOc08IHOOwuOMTDrol.DNJG5bzyG6hIh99s9eyv/3I5BBxPm4q,Pagos Corp,payer,1,1,2026-04-29 21:41:36
+5,cliente@demo.com,$2b$12$uO6i0YdSV5J2GbXQg2SspOowwYixeUG2zPIqfRDXKpLIueFMtU.Xe,Carlos Cliente,client,1,1,2026-04-29 21:41:36
+6,cliente@ritmo.com,$2b$12$Ah9TiktmMnL93jwHJ5U4w.SCAIvoNwpdc2KIFmDVNJnxYkVKAHK42,Usuario Ritmo,client,1,3,2026-04-29 22:17:47

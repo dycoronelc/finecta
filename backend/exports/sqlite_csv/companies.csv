@@ -1,0 +1,4 @@
+id,legal_name,trade_name,tax_id,contact_email,phone,kyc_status,kyc_notes,approved_at,created_at
+1,Comercial Demo SRL,Demo,123456789,empresa@demo.com,809-555-0000,approved,,2026-04-29 21:41:35.612380,2026-04-29 21:41:35
+2,Importadora BETA SRL,,987654321,beta@demo.com,,in_review,,,2026-04-29 21:41:35
+3,Ritmo,Ritmo,00000000013,contacto@ritmo.com,,approved,,2026-04-29 22:17:24.782308,2026-04-29 22:17:24

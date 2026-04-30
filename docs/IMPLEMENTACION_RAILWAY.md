@@ -28,6 +28,43 @@ Crear **un solo proyecto Railway** con 2 servicios:
 3. Seleccione **Deploy from GitHub repo** y conecte este repositorio.
 4. Railway detectara el repo, pero como es monorepo, luego configuraremos cada servicio con su **Root Directory**.
 
+## 3.1) Build y Deploy en Railway (donde va cada cosa)
+
+En Railway, cada servicio tiene fases distintas. En la practica suele verse asi:
+
+| Fase en Railway | Donde la configura | Que hace |
+|-----------------|--------------------|----------|
+| **Build** | Servicio -> **Settings** -> **Build** (o pestana **Build** segun la UI) | Se ejecuta al recibir un push o al redeployar: instala dependencias y prepara el artefacto (por ejemplo `node_modules` o el entorno Python). |
+| **Deploy** (arranque) | Servicio -> **Settings** -> **Deploy** (campo **Custom Start Command** o **Start Command**) | Comando que corre el contenedor cuando ya esta construido: aqui va el servidor web (uvicorn, serve, etc.). |
+
+**Monorepo:** en ambos servicios defina **Root Directory** (`backend` o `frontend`) para que Build y Start se ejecuten desde esa carpeta. Si no, Railway intentara construir desde la raiz del repo y fallara.
+
+**Variables y Build del frontend:** Vite inyecta `VITE_*` en tiempo de **build**. Defina `VITE_API_BASE` en las variables del servicio **antes** del build; si la cambia despues, haga un **Redeploy** para que se vuelva a ejecutar el Build.
+
+### Valores recomendados (copiar en Railway)
+
+**Servicio `finecta-backend`**
+
+| Campo | Valor |
+|-------|--------|
+| **Root Directory** | `backend` |
+| **Build Command** (Build) | `pip install -r requirements.txt` |
+| **Start Command** (Deploy) | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+
+Opcional en **Build** -> **Watch Paths** (si su UI lo ofrece): `backend/**` para que solo redeploye el backend cuando cambien archivos bajo `backend/`.
+
+**Servicio `finecta-frontend`**
+
+| Campo | Valor |
+|-------|--------|
+| **Root Directory** | `frontend` |
+| **Build Command** (Build) | `npm ci && npm run build` |
+| **Start Command** (Deploy) | `npx serve -s dist -l $PORT` |
+
+Opcional en **Build** -> **Watch Paths**: `frontend/**`.
+
+> Si `serve` no esta en `package.json`, use la seccion 6.2 o el Start Command alternativo alli indicado.
+
 ## 4) Preparar MySQL externa en GoDaddy
 
 Antes de desplegar backend en Railway, confirme estos puntos en su servidor MySQL de GoDaddy:
@@ -46,10 +83,12 @@ Antes de desplegar backend en Railway, confirme estos puntos en su servidor MySQ
 
 1. En el proyecto Railway, cree un nuevo servicio desde el mismo repo.
 2. Nombre sugerido: `finecta-backend`.
-3. Configure:
+3. Abra **Settings** del servicio y complete:
    - **Root Directory**: `backend`
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   - En **Build** -> **Build Command**: `pip install -r requirements.txt`
+   - En **Deploy** -> **Custom Start Command** (o **Start Command**): `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+
+Railway inyecta `$PORT`; no use un puerto fijo como `8000` en produccion.
 
 ### 5.2 Variables de entorno backend
 
@@ -57,20 +96,36 @@ En `finecta-backend`, configure estas variables:
 
 - `SECRET_KEY`: una clave larga aleatoria (obligatorio en produccion)
 - `ACCESS_TOKEN_EXPIRE_MINUTES`: por ejemplo `1440`
-- `DATABASE_URL`: cadena MySQL de GoDaddy usando `mysql+pymysql`
+- `DB_DIALECT`: `mysql+pymysql`
+- `DB_HOST`: host de MySQL en GoDaddy
+- `DB_PORT`: `3306`
+- `DB_NAME`: nombre de la base (ejemplo: `finecta`)
+- `DB_USER`: usuario MySQL
+- `DB_PASSWORD`: clave MySQL (puede incluir `/` y otros simbolos)
+- `DB_CHARSET`: `utf8mb4`
 - `CORS_ORIGINS`: lista JSON con el dominio del frontend
 
-Ejemplo de `DATABASE_URL` (adaptar con datos reales de GoDaddy):
+> Recomendado: usar variables separadas y dejar `DATABASE_URL` vacia.
+
+Ejemplo completo de variables separadas:
 
 ```text
-mysql+pymysql://USUARIO:PASSWORD@HOST:PUERTO/NOMBRE_DB?charset=utf8mb4
+DB_DIALECT=mysql+pymysql
+DB_HOST=mi-host-godaddy.com
+DB_PORT=3306
+DB_NAME=finecta
+DB_USER=finecta_user
+DB_PASSWORD=Mi/Password/Segura
+DB_CHARSET=utf8mb4
 ```
 
-Ejemplo practico:
+Opcional (solo si quiere usar URL completa en una sola variable):
 
 ```text
 mysql+pymysql://finecta_user:MiPasswordSegura@mi-host-godaddy.com:3306/finecta?charset=utf8mb4
 ```
+
+Si usa esta opcion y su clave tiene caracteres especiales (`/`, `@`, `:`, etc.), debe codificarlos en URL.
 
 Ejemplo inicial de `CORS_ORIGINS`:
 
@@ -107,10 +162,13 @@ En Railway conviene fijar `VITE_API_BASE` con la URL publica del backend.
 
 1. Cree otro servicio desde el mismo repo.
 2. Nombre sugerido: `finecta-frontend`.
-3. Configure:
+3. Defina primero las variables (al menos `VITE_API_BASE`) en **Variables** del servicio.
+4. Abra **Settings** y complete:
    - **Root Directory**: `frontend`
-   - **Build Command**: `npm ci && npm run build`
-   - **Start Command**: `npx serve -s dist -l $PORT`
+   - En **Build** -> **Build Command**: `npm ci && npm run build`
+   - En **Deploy** -> **Custom Start Command**: `npx serve -s dist -l $PORT`
+
+El **Build** genera `frontend/dist/`. El **Deploy** solo sirve esos archivos estaticos; no vuelve a compilar salvo que redeploye.
 
 ### 6.2 Dependencia para servir build estatico
 
@@ -191,7 +249,7 @@ Una vez tenga el dominio real del frontend:
 ## 11) Solucion de problemas comunes
 
 - **Error de conexion a BD**  
-  Verifique `DATABASE_URL` con driver `mysql+pymysql`, credenciales correctas, acceso remoto habilitado en GoDaddy y reglas de firewall.
+  Verifique `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, acceso remoto habilitado en GoDaddy y reglas de firewall.
 
 - **Timeout al conectar a MySQL externa**  
   Suele ser red/firewall: confirme que el host de GoDaddy responde desde fuera y que el puerto `3306` esta abierto para conexiones remotas.
@@ -204,6 +262,50 @@ Una vez tenga el dominio real del frontend:
 
 - **Error al iniciar frontend por comando `serve`**  
   Instalar `serve` (preferible en `package.json`) o ajustar Start Command como se indica arriba.
+
+## 12) Crear estructura MySQL y migrar datos desde SQLite
+
+Si ya tiene datos en `backend/finecta_dev.db` (SQLite), use estos archivos:
+
+- `backend/scripts/create_mysql_schema.sql`
+- `backend/scripts/migrate_sqlite_to_mysql.py`
+
+### 12.1 Crear estructura completa en MySQL
+
+Ejecute el SQL en su servidor MySQL (GoDaddy), por ejemplo con cliente `mysql`:
+
+```bash
+mysql -h HOST -P 3306 -u USUARIO -p < backend/scripts/create_mysql_schema.sql
+```
+
+### 12.2 Migrar toda la data desde SQLite a MySQL
+
+Desde `backend/` con entorno virtual activo:
+
+```bash
+python scripts/migrate_sqlite_to_mysql.py \
+  --sqlite-url "sqlite:///./finecta_dev.db" \
+  --mysql-url "mysql+pymysql://USUARIO:PASSWORD@HOST:3306/finecta?charset=utf8mb4" \
+  --truncate-first
+```
+
+Notas:
+
+- `--truncate-first` limpia tablas destino antes de copiar (util para primera migracion).
+- El script preserva IDs y relaciones foraneas.
+- Si su SQLite esta en otra ruta, cambie `--sqlite-url`.
+- Si su clave tiene caracteres especiales, puede usar variables separadas en Railway para la app, pero en este comando puntual debe codificar la clave en formato URL.
+
+### 12.3 Validar migracion
+
+Puede validar con conteos basicos:
+
+```sql
+SELECT COUNT(*) FROM users;
+SELECT COUNT(*) FROM companies;
+SELECT COUNT(*) FROM invoices;
+SELECT COUNT(*) FROM factoring_operations;
+```
 
 ---
 
