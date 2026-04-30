@@ -41,6 +41,8 @@ En Railway, cada servicio tiene fases distintas. En la practica suele verse asi:
 
 **Variables y Build del frontend:** Vite inyecta `VITE_*` en tiempo de **build**. Defina `VITE_API_BASE` en las variables del servicio **antes** del build; si la cambia despues, haga un **Redeploy** para que se vuelva a ejecutar el Build.
 
+**Dependencias de desarrollo en el Build:** `vite` y `typescript` estan en `devDependencies`. Si Railway/Nixpacks activa instalacion solo de produccion, el build puede fallar al no encontrar `vite`. En variables del frontend defina `NPM_CONFIG_PRODUCTION=false` (o no defina `NODE_ENV=production` durante el build) para que `npm ci` instale tambien `devDependencies`.
+
 ### Valores recomendados (copiar en Railway)
 
 **Servicio `finecta-backend`**
@@ -58,7 +60,7 @@ Opcional en **Build** -> **Watch Paths** (si su UI lo ofrece): `backend/**` para
 | Campo | Valor |
 |-------|--------|
 | **Root Directory** | `frontend` |
-| **Build Command** (Build) | `npm ci && npm run build` |
+| **Build Command** (Build) | `npm install --no-audit --no-fund && npm run build` |
 | **Start Command** (Deploy) | `npx serve -s dist -l $PORT` |
 
 Opcional en **Build** -> **Watch Paths**: `frontend/**`.
@@ -165,27 +167,28 @@ En Railway conviene fijar `VITE_API_BASE` con la URL publica del backend.
 3. Defina primero las variables (al menos `VITE_API_BASE`) en **Variables** del servicio.
 4. Abra **Settings** y complete:
    - **Root Directory**: `frontend`
-   - En **Build** -> **Build Command**: `npm ci && npm run build`
+   - En **Build** -> **Build Command**: `npm install --no-audit --no-fund && npm run build`
    - En **Deploy** -> **Custom Start Command**: `npx serve -s dist -l $PORT`
 
 El **Build** genera `frontend/dist/`. El **Deploy** solo sirve esos archivos estaticos; no vuelve a compilar salvo que redeploye.
 
+**Por que no `rm -rf node_modules` ni solo `npm ci`:** en algunos entornos de Railway la caché de build monta o bloquea `node_modules/.vite`; borrar todo `node_modules` o el borrado interno de `npm ci` puede fallar con `EBUSY` / `Device or resource busy`. `npm install` actualiza dependencias **sin** exigir borrar el arbol completo y suele evitar ese fallo.
+
+En el repo, `vite.config.ts` define `cacheDir: ".vite-cache"` para que la caché de dependencias de Vite **no** viva bajo `node_modules/.vite` (menos conflictos con la caché del builder).
+
+Opcional (mas estricto con el lockfile), si ya limpio caché en Railway y el build pasa estable: `npm ci && npm run build`.
+
 ### 6.2 Dependencia para servir build estatico
 
-Como `serve` no esta en `package.json`, tiene dos opciones:
+El proyecto incluye `serve` en `dependencies` (ver `frontend/package.json`). Si en algun fork no existiera, agreguelo con `npm install serve --save` y suba el cambio al repo.
 
-- Opcion A (recomendada): agregar `serve` como dependencia de produccion:
-  - `npm install serve --save`
-  - subir cambio al repo
-- Opcion B: cambiar Start Command a:
-  - `npm install -g serve && serve -s dist -l $PORT`
-
-La opcion A genera despliegues mas limpios y reproducibles.
+Alternativa sin dependencia local: Start Command `npm install -g serve && serve -s dist -l $PORT` (menos reproducible que tener `serve` en el repo).
 
 ### 6.3 Variables de entorno frontend
 
 Defina en Railway:
 
+- `NPM_CONFIG_PRODUCTION` = `false` (recomendado: asi `npm install` / `npm ci` instalan `devDependencies` necesarias para `vite build`)
 - `VITE_API_BASE` = `https://<dominio-backend>/api/v1`
 
 Ejemplo:
@@ -262,6 +265,12 @@ Una vez tenga el dominio real del frontend:
 
 - **Error al iniciar frontend por comando `serve`**  
   Instalar `serve` (preferible en `package.json`) o ajustar Start Command como se indica arriba.
+
+- **Build frontend: `EBUSY` / `Device or resource busy` en `node_modules` o `.vite`**  
+  Use el Build Command `npm install --no-audit --no-fund && npm run build`, confirme que el repo incluye `cacheDir: ".vite-cache"` en `vite.config.ts`, y en Railway use **Clear build cache** (o redeploy sin cache) una vez. No use `rm -rf node_modules` si el error es al borrar esa carpeta.
+
+- **Build frontend: no encuentra `vite` o falla `tsc`**  
+  Defina `NPM_CONFIG_PRODUCTION=false` en variables del servicio frontend y redeploy.
 
 ## 12) Crear estructura MySQL y migrar datos desde SQLite
 
