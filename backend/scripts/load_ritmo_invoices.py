@@ -77,6 +77,7 @@ def run() -> None:
                 tax_id=RITMO_TAX_ID,
                 contact_email="contacto@ritmo.com",
                 phone="",
+                contact_full_name="Contacto Ritmo",
                 kyc_status=KycStatus.approved.value,
                 approved_at=datetime.now(timezone.utc),
             )

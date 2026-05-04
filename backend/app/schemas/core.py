@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # --- Company ---
@@ -12,14 +12,32 @@ class CompanyCreate(BaseModel):
     tax_id: str
     contact_email: str
     phone: str | None = None
+    contact_full_name: str | None = None
+
+
+class CompanyStaffCreate(BaseModel):
+    """Alta de cliente por Finecta (sin usuario portal aún)."""
+
+    legal_name: str
+    trade_name: str | None = None
+    tax_id: str
+    contact_email: str
+    phone: str | None = None
+    contact_full_name: str = Field(..., min_length=2, description="Nombre y apellidos del contacto principal")
+
+
+class CompanyGeneralUpdate(BaseModel):
+    legal_name: str | None = None
+    trade_name: str | None = None
+    tax_id: str | None = None
+    contact_email: str | None = None
+    phone: str | None = None
+    contact_full_name: str | None = None
 
 
 class CompanyUpdate(BaseModel):
     kyc_status: str | None = None
     kyc_notes: str | None = None
-    legal_name: str | None = None
-    contact_email: str | None = None
-    phone: str | None = None
 
 
 class CompanyOut(BaseModel):
@@ -29,10 +47,19 @@ class CompanyOut(BaseModel):
     tax_id: str
     contact_email: str
     phone: str | None
+    contact_full_name: str = ""
     kyc_status: str
     kyc_notes: str | None
+    kyc_screening: dict | None = None
     approved_at: datetime | None
     created_at: datetime
+
+    @field_validator("contact_full_name", mode="before")
+    @classmethod
+    def _empty_contact(cls, v: object) -> str:
+        if v is None:
+            return ""
+        return str(v).strip()
 
     class Config:
         from_attributes = True
@@ -43,6 +70,7 @@ class CompanyDocumentOut(BaseModel):
     file_path: str
     original_name: str
     document_type: str
+    party_name: str | None = None
     uploaded_at: datetime
 
     class Config:

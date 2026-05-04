@@ -21,7 +21,7 @@ const nav: { to: string; label: string; icon: ReactNode; roles: Role[]; end?: bo
   [
     { to: "/app", label: "Panel", icon: <Home className="h-5 w-5" />, roles: ["admin", "analyst", "client", "fiduciary", "payer"], end: true },
     { to: "/app/onboarding", label: "Onboarding", icon: <UserCircle className="h-5 w-5" />, roles: ["client"] },
-    { to: "/app/empresas", label: "Empresas / KYC", icon: <LayoutList className="h-5 w-5" />, roles: ["admin", "analyst"] },
+    { to: "/app/clientes", label: "Clientes", icon: <LayoutList className="h-5 w-5" />, roles: ["admin", "analyst"] },
     { to: "/app/facturas", label: "Facturas", icon: <FileText className="h-5 w-5" />, roles: ["admin", "analyst", "client"] },
     { to: "/app/cotizaciones", label: "Cotizaciones", icon: <Wallet className="h-5 w-5" />, roles: ["admin", "analyst", "client"] },
     { to: "/app/operaciones", label: "Operaciones", icon: <LayoutList className="h-5 w-5" />, roles: ["admin", "analyst", "client", "fiduciary"] },

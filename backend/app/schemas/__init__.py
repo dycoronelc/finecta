@@ -1,7 +1,9 @@
 from app.schemas.auth import Token, TokenResponse, UserCreate, UserLogin, UserOut
 from app.schemas.core import (  # noqa: F401
     CompanyCreate,
+    CompanyGeneralUpdate,
     CompanyOut,
+    CompanyStaffCreate,
     CompanyUpdate,
     ContractOut,
     DisbursementOut,
@@ -24,7 +26,9 @@ __all__ = [
     "UserLogin",
     "UserOut",
     "CompanyCreate",
+    "CompanyGeneralUpdate",
     "CompanyOut",
+    "CompanyStaffCreate",
     "CompanyUpdate",
     "ContractOut",
     "DisbursementOut",

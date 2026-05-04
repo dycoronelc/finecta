@@ -14,8 +14,10 @@ CREATE TABLE IF NOT EXISTS companies (
   tax_id VARCHAR(64) NOT NULL,
   contact_email VARCHAR(255) NOT NULL,
   phone VARCHAR(64) NULL,
+  contact_full_name VARCHAR(255) NOT NULL DEFAULT '',
   kyc_status ENUM('draft', 'submitted', 'in_review', 'approved', 'rejected') NOT NULL DEFAULT 'draft',
   kyc_notes TEXT NULL,
+  kyc_screening JSON NULL,
   approved_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX ix_companies_tax_id (tax_id)
@@ -41,6 +43,7 @@ CREATE TABLE IF NOT EXISTS company_documents (
   file_path VARCHAR(1024) NOT NULL,
   original_name VARCHAR(512) NOT NULL,
   document_type VARCHAR(64) NOT NULL,
+  party_name VARCHAR(255) NULL,
   uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_company_documents_company_id FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

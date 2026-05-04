@@ -13,7 +13,8 @@ import { OperationDetailPage } from "./pages/OperationDetailPage";
 import { ContractsPage } from "./pages/ContractsPage";
 import { ValidationPage } from "./pages/ValidationPage";
 import { QuotationsPage } from "./pages/QuotationsPage";
-import { CompaniesPage } from "./pages/CompaniesPage";
+import { ClientsPage } from "./pages/ClientsPage";
+import { ClientDetailPage } from "./pages/ClientDetailPage";
 import { FiduciaryPage } from "./pages/FiduciaryPage";
 import { LandingPage } from "./pages/LandingPage";
 
@@ -49,7 +50,10 @@ function AppRoutes() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="onboarding" element={<OnboardingPage />} />
-        <Route path="empresas" element={<CompaniesPage />} />
+        <Route path="empresas" element={<Navigate to="/app/clientes" replace />} />
+        <Route path="clientes" element={<ClientsPage />} />
+        <Route path="clientes/nuevo" element={<ClientDetailPage />} />
+        <Route path="clientes/:id" element={<ClientDetailPage />} />
         <Route path="facturas" element={<InvoicesPage />} />
         <Route path="cotizaciones" element={<QuotationsPage />} />
         <Route path="operaciones" element={<OperationsPage />} />

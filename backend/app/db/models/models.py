@@ -132,10 +132,16 @@ class Company(Base):
     tax_id: Mapped[str] = mapped_column(String(64), index=True)
     contact_email: Mapped[str] = mapped_column(String(255))
     phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    contact_full_name: Mapped[str] = mapped_column(
+        String(255), default="", doc="Nombre y apellidos del contacto principal"
+    )
     kyc_status: Mapped[str] = mapped_column(
         Enum(KycStatus, values_callable=_enum_values), default=KycStatus.draft.value
     )
     kyc_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    kyc_screening: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True, doc="Solicitudes y resultados del proveedor de listas (KYC externo)"
+    )
     approved_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -161,7 +167,10 @@ class CompanyDocument(Base):
     original_name: Mapped[str] = mapped_column(String(512))
     document_type: Mapped[str] = mapped_column(
         String(64)
-    )  # ruc, bank, etc.
+    )  # ruc, registro_mercantil, ubo_identidad, etc.
+    party_name: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, doc="Nombre del beneficiario final (documentos UBO)"
+    )
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

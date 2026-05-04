@@ -23,6 +23,8 @@ def ensure_uploads() -> None:
 def create_tables() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_invoice_payer_tax_id_column()
+    _ensure_company_client_columns()
+    _ensure_company_document_party_name()
 
 
 def _ensure_invoice_payer_tax_id_column() -> None:
@@ -40,6 +42,44 @@ def _ensure_invoice_payer_tax_id_column() -> None:
         conn.execute(text(ddl))
 
 
+def _ensure_company_client_columns() -> None:
+    insp = inspect(engine)
+    if "companies" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("companies")}
+    sqlite = settings.database_url.startswith("sqlite")
+    with engine.begin() as conn:
+        if "contact_full_name" not in cols:
+            if sqlite:
+                conn.execute(text("ALTER TABLE companies ADD COLUMN contact_full_name VARCHAR(255)"))
+                conn.execute(text("UPDATE companies SET contact_full_name = '' WHERE contact_full_name IS NULL"))
+            else:
+                conn.execute(
+                    text(
+                        "ALTER TABLE companies ADD COLUMN contact_full_name VARCHAR(255) NOT NULL DEFAULT ''"
+                    )
+                )
+        if "kyc_screening" not in cols:
+            ddl = (
+                "ALTER TABLE companies ADD COLUMN kyc_screening TEXT"
+                if sqlite
+                else "ALTER TABLE companies ADD COLUMN kyc_screening JSON NULL"
+            )
+            conn.execute(text(ddl))
+
+
+def _ensure_company_document_party_name() -> None:
+    insp = inspect(engine)
+    if "company_documents" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("company_documents")}
+    if "party_name" in cols:
+        return
+    ddl = "ALTER TABLE company_documents ADD COLUMN party_name VARCHAR(255) NULL"
+    with engine.begin() as conn:
+        conn.execute(text(ddl))
+
+
 def seed_if_empty() -> None:
     db: Session = SessionLocal()
     try:
@@ -52,6 +92,7 @@ def seed_if_empty() -> None:
             tax_id="123456789",
             contact_email="empresa@demo.com",
             phone="809-555-0000",
+            contact_full_name="María Pérez de León",
             kyc_status=KycStatus.approved.value,
             approved_at=datetime.now(timezone.utc),
         )
@@ -59,6 +100,8 @@ def seed_if_empty() -> None:
             legal_name="Importadora BETA SRL",
             tax_id="987654321",
             contact_email="beta@demo.com",
+            phone="809-555-0100",
+            contact_full_name="Juan B. Gómez",
             kyc_status=KycStatus.in_review.value,
         )
         db.add_all([c_demo, c_pending])

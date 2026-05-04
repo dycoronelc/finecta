@@ -36,6 +36,7 @@ type AuthState = {
     tax_id: string;
     contact_email: string;
     phone?: string;
+    contact_full_name?: string;
     admin_email: string;
     admin_name: string;
     password: string;
@@ -95,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       tax_id: string;
       contact_email: string;
       phone?: string;
+      contact_full_name?: string;
       admin_email: string;
       admin_name: string;
       password: string;

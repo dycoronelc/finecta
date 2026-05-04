@@ -28,12 +28,14 @@ def _register_core(db: Session, body: RegisterCompany) -> models.User:
     ).scalar_one_or_none()
     if exists:
         raise HTTPException(400, "El correo ya está registrado")
+    contact_fn = (body.contact_full_name or body.admin_name or "").strip()[:255]
     co = models.Company(
         legal_name=body.legal_name,
         trade_name=body.trade_name,
         tax_id=body.tax_id,
         contact_email=body.contact_email,
         phone=body.phone,
+        contact_full_name=contact_fn,
     )
     db.add(co)
     db.flush()

@@ -10,6 +10,7 @@ export function RegisterPage() {
     tax_id: "",
     contact_email: "",
     phone: "",
+    contact_full_name: "",
     admin_email: "",
     admin_name: "",
     password: "",
@@ -57,6 +58,15 @@ export function RegisterPage() {
             <div className="sm:col-span-2">
               <label className="text-xs text-zinc-500">Correo de contacto</label>
               <input className="f-input mt-1" type="email" value={form.contact_email} onChange={(e) => set("contact_email", e.target.value)} required />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs text-zinc-500">Nombre y apellidos del contacto principal</label>
+              <input
+                className="f-input mt-1"
+                value={form.contact_full_name}
+                onChange={(e) => set("contact_full_name", e.target.value)}
+                placeholder="Si lo deja vacío, se usará el nombre del administrador"
+              />
             </div>
             <div>
               <label className="text-xs text-zinc-500">Nombre del administrador</label>
