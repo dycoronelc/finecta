@@ -37,6 +37,18 @@ export function OnboardingPage() {
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
   }, [user?.company_id]);
 
+  async function submitForReview() {
+    if (!co) return;
+    setErr(null);
+    try {
+      const updated = await api<Company>("/companies/mine/submit-for-review", { method: "POST" });
+      setCo(updated);
+      await refreshMe();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error");
+    }
+  }
+
   async function upload() {
     if (!co || !file) return;
     setErr(null);
@@ -120,8 +132,16 @@ export function OnboardingPage() {
       )}
 
       {co && step === 2 && (
-        <div className="f-panel text-sm text-zinc-700 space-y-2">
+        <div className="f-panel text-sm text-zinc-700 space-y-3">
           <p>El equipo de Finecta validará su expediente. Recibirá notificación al aprobarse KYC.</p>
+          {co.kyc_status === "draft" && docs.length > 0 && (
+            <button type="button" className="f-btn-primary text-xs" onClick={() => void submitForReview()}>
+              Enviar expediente a revisión
+            </button>
+          )}
+          {co.kyc_status === "draft" && docs.length === 0 && (
+            <p className="text-zinc-500 text-xs">Adjunte al menos un documento en el paso anterior para poder enviar a revisión.</p>
+          )}
           {co.kyc_notes && <p className="text-amber-800 bg-amber-50 rounded-lg p-3">Nota: {co.kyc_notes}</p>}
         </div>
       )}

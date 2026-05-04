@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -22,6 +22,22 @@ def ensure_uploads() -> None:
 
 def create_tables() -> None:
     Base.metadata.create_all(bind=engine)
+    _ensure_invoice_payer_tax_id_column()
+
+
+def _ensure_invoice_payer_tax_id_column() -> None:
+    """Añade columnas nuevas en BD existentes (create_all no altera tablas ya creadas)."""
+    insp = inspect(engine)
+    if "invoices" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("invoices")}
+    if "payer_tax_id" in cols:
+        return
+    ddl = "ALTER TABLE invoices ADD COLUMN payer_tax_id VARCHAR(64) NULL"
+    if settings.database_url.startswith("sqlite"):
+        ddl = "ALTER TABLE invoices ADD COLUMN payer_tax_id VARCHAR(64)"
+    with engine.begin() as conn:
+        conn.execute(text(ddl))
 
 
 def seed_if_empty() -> None:

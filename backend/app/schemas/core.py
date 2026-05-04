@@ -56,6 +56,7 @@ class InvoiceOut(BaseModel):
     invoice_number: str
     issuer: str
     payer: str
+    payer_tax_id: str | None = None
     amount: Decimal
     due_date: date | None
     status: str
@@ -67,10 +68,18 @@ class InvoiceOut(BaseModel):
         from_attributes = True
 
 
+class InvoicePayerFilterOption(BaseModel):
+    """Valores distintos de pagador por empresa (un emisor puede tener muchos pagadores)."""
+
+    payer: str
+    payer_tax_id: str | None = None
+
+
 class InvoiceUpdate(BaseModel):
     invoice_number: str | None = None
     issuer: str | None = None
     payer: str | None = None
+    payer_tax_id: str | None = None
     amount: Decimal | None = None
     due_date: date | None = None
     status: str | None = None
@@ -117,6 +126,10 @@ class OperationCreate(BaseModel):
     company_id: int
     quotation_id: int | None = None
     items: list[OperationInvoiceIn]
+    allow_multiple_payers: bool = Field(
+        default=True,
+        description="Si es false, no se permite vincular facturas con distinto pagador en la misma operación.",
+    )
 
 
 class OperationEventOut(BaseModel):

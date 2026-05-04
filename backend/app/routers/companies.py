@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, is_finecta_user, require_roles
@@ -48,6 +48,42 @@ def get_my_company(
     return c
 
 
+@router.post(
+    "/mine/submit-for-review",
+    response_model=CompanyOut,
+    summary="Cliente: enviar expediente KYC a revisión (requiere al menos un documento)",
+)
+def submit_kyc_for_review(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+) -> models.Company:
+    if user.role != UserRole.client.value or not user.company_id:
+        raise HTTPException(403, "Solo clientes con empresa asignada")
+    c = db.get(models.Company, user.company_id)
+    if not c:
+        raise HTTPException(404, "Empresa no encontrada")
+    if c.kyc_status != KycStatus.draft.value:
+        raise HTTPException(
+            400, "El expediente ya fue enviado o no está en borrador"
+        )
+    n_docs = (
+        db.execute(
+            select(func.count())
+            .select_from(models.CompanyDocument)
+            .where(models.CompanyDocument.company_id == c.id)
+        ).scalar()
+        or 0
+    )
+    if int(n_docs) < 1:
+        raise HTTPException(
+            400, "Adjunte al menos un documento antes de enviar a revisión"
+        )
+    c.kyc_status = KycStatus.submitted.value
+    db.commit()
+    db.refresh(c)
+    return c
+
+
 @router.get("/{company_id}", response_model=CompanyOut)
 def get_company(
     company_id: int,
@@ -81,7 +117,10 @@ def update_kyc(
             setattr(c, k, v)
     if body.kyc_status == KycStatus.approved.value:
         from datetime import datetime, timezone
+
         c.approved_at = datetime.now(timezone.utc)
+    elif body.kyc_status is not None and body.kyc_status != KycStatus.approved.value:
+        c.approved_at = None
     db.commit()
     db.refresh(c)
     return c

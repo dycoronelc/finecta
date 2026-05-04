@@ -27,6 +27,40 @@ def _norm_num(s: str) -> str:
     return re.sub(r"\s+", "", s).upper()
 
 
+def _digits_only(s: str | None) -> str:
+    if not s:
+        return ""
+    return re.sub(r"\D", "", s)
+
+
+def _norm_payer_name(s: str) -> str:
+    return re.sub(r"\s+", " ", s.strip()).lower()
+
+
+def _pick_invoice_for_row(found: list[Invoice], row: RowInfo) -> Invoice | None:
+    """Si hay varias facturas con el mismo número (distintos pagadores), desambigua con Excel."""
+    if not found:
+        return None
+    if len(found) == 1:
+        return found[0]
+    row_p = (row.payer or "").strip()
+    row_digits = _digits_only(row_p)
+    if row_digits:
+        for inv in found:
+            inv_d = _digits_only(inv.payer_tax_id)
+            if inv_d and inv_d == row_digits:
+                return inv
+            if row_digits in _digits_only(inv.payer) or _digits_only(inv.payer) in row_digits:
+                return inv
+    if row_p:
+        rn = _norm_payer_name(row_p)
+        for inv in found:
+            pn = _norm_payer_name(inv.payer or "")
+            if rn in pn or pn in rn:
+                return inv
+    return None
+
+
 def _find_header_row(sheet) -> int:
     for i, row in enumerate(sheet.iter_rows(max_row=20, values_only=True), start=1):
         row_l = " ".join(str(c or "") for c in row).lower()
@@ -131,7 +165,16 @@ def run_matching(
                 )
             )
             continue
-        inv = found[0]
+        inv = _pick_invoice_for_row(found, row)
+        if inv is None:
+            matches.append(
+                MatchItem(
+                    kind="ambiguous_invoice",
+                    message="Varias facturas con el mismo número; indique pagador o RNC en el Excel",
+                    excel_number=row.invoice_number,
+                )
+            )
+            continue
         if inv.id in used_ids:
             matches.append(
                 MatchItem(

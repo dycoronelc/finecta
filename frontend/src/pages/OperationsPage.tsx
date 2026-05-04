@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 import { money } from "../lib/format";
 import { StatusBadge } from "../components/ui/StatusBadge";
 
@@ -15,19 +16,52 @@ type Op = {
   invoice_count: number;
 };
 
+type Co = { id: number; legal_name: string };
+
 export function OperationsPage() {
+  const { user } = useAuth();
+  const staff = user?.role === "admin" || user?.role === "analyst";
   const [rows, setRows] = useState<Op[]>([]);
+  const [companies, setCompanies] = useState<Co[]>([]);
+  const [companyId, setCompanyId] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    api<Op[]>("/operations")
+    if (!staff) return;
+    api<Co[]>("/companies")
+      .then(setCompanies)
+      .catch(() => setCompanies([]));
+  }, [staff]);
+
+  useEffect(() => {
+    const q = companyId ? `?company_id=${encodeURIComponent(companyId)}` : "";
+    api<Op[]>(`/operations${q}`)
       .then(setRows)
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
-  }, []);
+  }, [companyId]);
 
   return (
     <div className="f-page w-full min-w-0">
       <h1 className="text-2xl font-bold text-zinc-900">Operaciones</h1>
+      {staff && (
+        <div className="flex flex-wrap items-end gap-2 max-w-md">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-zinc-500 mb-1">Empresa</p>
+            <select
+              className="f-input w-full text-sm"
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+            >
+              <option value="">Todas</option>
+              {companies.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.legal_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
       {err && <p className="text-sm text-red-600">{err}</p>}
       <div className="f-panel w-full min-w-0">
         <div className="f-data-shell -mx-1 sm:mx-0">

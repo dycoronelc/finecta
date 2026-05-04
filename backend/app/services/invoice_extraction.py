@@ -26,6 +26,11 @@ EMISOR_RE = re.compile(
 PAYER_RE = re.compile(
     r"(?i)(?:cliente|comprador|pagador)\s*[:#]?\s*([^\n]{4,80})"
 )
+# RNC dominicano típico: 9 dígitos o 11 con guiones (3-7-1)
+RNC_LOOSE_RE = re.compile(
+    r"(?i)(?:RNC|NCF|ID)\s*(?:comprador|cliente|pagador|del\s*cliente)?\s*[:#]?\s*([\d\-\s]{9,15})"
+)
+RNC_DIGITS_RE = re.compile(r"\b(\d{3}[\s.-]?\d{7}[\s.-]?\d|\d{9})\b")
 
 
 def _parse_amount(s: str) -> Decimal | None:
@@ -62,11 +67,34 @@ def _parse_date(s: str) -> date | None:
     return None
 
 
+def _normalize_tax_id(s: str | None) -> str | None:
+    if not s:
+        return None
+    d = re.sub(r"\D", "", s)
+    return d if len(d) >= 9 else None
+
+
+def _extract_payer_tax_id(text: str, payer_line: str | None) -> str | None:
+    m = RNC_LOOSE_RE.search(text)
+    if m:
+        return _normalize_tax_id(m.group(1))
+    window = text
+    if payer_line:
+        idx = text.find(payer_line[: min(20, len(payer_line))])
+        if idx >= 0:
+            window = text[idx : idx + 600]
+    m2 = RNC_DIGITS_RE.search(window)
+    if m2:
+        return _normalize_tax_id(m2.group(1))
+    return None
+
+
 @dataclass
 class ExtractionResult:
     invoice_number: str | None
     issuer: str | None
     payer: str | None
+    payer_tax_id: str | None
     amount: Decimal | None
     due_date: date | None
     raw_text_preview: str
@@ -124,10 +152,13 @@ def extract_from_pdf(file_path: Path) -> ExtractionResult:
                 amount = a
                 break
 
+    payer_tax = _extract_payer_tax_id(text, payer)
+
     return ExtractionResult(
         invoice_number=number,
         issuer=emisor,
         payer=payer,
+        payer_tax_id=payer_tax,
         amount=amount,
         due_date=due,
         raw_text_preview=preview,
@@ -139,6 +170,7 @@ def to_dict(e: ExtractionResult) -> dict[str, Any]:
         "invoice_number": e.invoice_number,
         "issuer": e.issuer,
         "payer": e.payer,
+        "payer_tax_id": e.payer_tax_id,
         "amount": str(e.amount) if e.amount is not None else None,
         "due_date": e.due_date.isoformat() if e.due_date else None,
         "raw_text_preview": e.raw_text_preview[:2000],

@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Numeric,
     String,
     Text,
@@ -169,12 +170,16 @@ class CompanyDocument(Base):
 
 class Invoice(Base):
     __tablename__ = "invoices"
+    __table_args__ = (Index("ix_invoices_company_payer", "company_id", "payer"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"))
     invoice_number: Mapped[str] = mapped_column(String(128), index=True)
     issuer: Mapped[str] = mapped_column(String(512))
     payer: Mapped[str] = mapped_column(String(512))
+    payer_tax_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True, doc="RNC u otro ID del pagador (varios pagadores por emisor)"
+    )
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
     due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(

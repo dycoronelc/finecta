@@ -35,6 +35,25 @@ export function CompaniesPage() {
     }
   }
 
+  async function rejectCompany(id: number) {
+    const notes = window.prompt("Motivo del rechazo (visible para el cliente):");
+    if (notes === null) return;
+    if (!notes.trim()) {
+      setErr("Indique un motivo para rechazar.");
+      return;
+    }
+    setErr(null);
+    try {
+      await api<C>(`/companies/${id}/kyc`, {
+        method: "PATCH",
+        json: { kyc_status: "rejected", kyc_notes: notes.trim() },
+      });
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error");
+    }
+  }
+
   return (
     <div className="f-page w-full min-w-0">
       <h1 className="text-2xl font-bold">Empresas (KYC)</h1>
@@ -72,9 +91,16 @@ export function CompaniesPage() {
                 <td className="py-2.5 pr-2"><div className="font-medium">{c.legal_name}</div><div className="text-xs text-zinc-500">{c.contact_email}</div></td>
                 <td className="py-2.5 pr-2 font-mono text-xs">{c.tax_id}</td>
                 <td className="py-2.5 pr-2"><StatusBadge status={c.kyc_status} /></td>
-                <td className="py-2.5 text-xs">
-                  {c.kyc_status !== "approved" && (
-                    <button type="button" className="text-emerald-700 font-medium" onClick={() => setStatus(c.id, "approved")}>Aprobar</button>
+                <td className="py-2.5 text-xs flex flex-wrap gap-x-3 gap-y-1">
+                  {c.kyc_status !== "approved" && c.kyc_status !== "rejected" && (
+                    <>
+                      <button type="button" className="text-emerald-700 font-medium" onClick={() => void setStatus(c.id, "approved")}>
+                        Aprobar
+                      </button>
+                      <button type="button" className="text-red-700 font-medium" onClick={() => void rejectCompany(c.id)}>
+                        Rechazar
+                      </button>
+                    </>
                   )}
                 </td>
               </tr>

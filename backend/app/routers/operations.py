@@ -147,6 +147,7 @@ def create_op(
 ) -> OperationOut:
     total = Decimal("0")
     oi_rows: list[tuple[int, Decimal]] = []
+    inv_refs: list[Invoice] = []
     for it in body.items:
         inv = db.get(Invoice, it.invoice_id)
         if not inv or inv.company_id != body.company_id:
@@ -154,6 +155,15 @@ def create_op(
         am = it.amount_assigned or inv.amount
         total += am
         oi_rows.append((inv.id, am))
+        inv_refs.append(inv)
+    payers = sorted(
+        {i.payer.strip() for i in inv_refs if i.payer and i.payer.strip() and i.payer != "—"}
+    )
+    if len(payers) > 1 and not body.allow_multiple_payers:
+        raise HTTPException(
+            400,
+            "Las facturas incluyen varios pagadores. Active «permitir varios pagadores» o cree operaciones separadas por pagador.",
+        )
     code = _code()
     op = FactoringOperation(
         code=code,
@@ -177,12 +187,25 @@ def create_op(
                 operation_id=op.id, invoice_id=iid, amount_assigned=am
             )
         )
+    payer_tax_ids = sorted(
+        {
+            (i.payer_tax_id or "").strip()
+            for i in inv_refs
+            if i.payer_tax_id and (i.payer_tax_id or "").strip()
+        }
+    )
     _add_event(
         db,
         op.id,
         "created",
-        "Operación creada y facturas vinculadas",
-        {"total": str(total)},
+        "Operación creada y facturas vinculadas"
+        + (f" · Pagadores: {', '.join(payers)}" if payers else ""),
+        {
+            "total": str(total),
+            "payers": payers,
+            "payer_tax_ids": payer_tax_ids,
+            "multiple_payers": len(payers) > 1,
+        },
     )
     db.commit()
     db.refresh(op)

@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   invoice_number VARCHAR(128) NOT NULL,
   issuer VARCHAR(512) NOT NULL,
   payer VARCHAR(512) NOT NULL,
+  payer_tax_id VARCHAR(64) NULL,
   amount NUMERIC(18,2) NOT NULL,
   due_date DATE NULL,
   status ENUM('draft', 'uploaded', 'in_quotation', 'in_operation', 'in_collection', 'paid', 'closed', 'rejected') NOT NULL DEFAULT 'draft',
@@ -59,6 +60,8 @@ CREATE TABLE IF NOT EXISTS invoices (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NULL,
   INDEX ix_invoices_invoice_number (invoice_number),
+  INDEX ix_invoices_payer_tax_id (payer_tax_id),
+  INDEX ix_invoices_company_payer (company_id, payer),
   CONSTRAINT fk_invoices_company_id FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
