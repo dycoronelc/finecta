@@ -18,12 +18,38 @@ from app.schemas.core import (
     CompanyGeneralUpdate,
     CompanyOut,
     CompanyStaffCreate,
+    CompanyTimelineEventOut,
     CompanyUpdate,
 )
+from app.services.company_timeline import add_company_timeline_event
 
 router = APIRouter(prefix="/companies", tags=["Clientes y onboarding"])
 
-# Tipos de documento KYC (legacy "ruc" se mantiene por compatibilidad)
+DOCUMENT_TYPES = frozenset(
+    {
+        "ruc",
+        "registro_mercantil",
+        "rnc_documento",
+        "acta_asamblea",
+        "cedula_representante",
+        "ubo_identidad",
+        "bank",
+        "other",
+    }
+)
+
+DOC_TYPE_LABELS: dict[str, str] = {
+    "ruc": "RNC / documento general",
+    "registro_mercantil": "Certificado de Registro Mercantil",
+    "rnc_documento": "Constancia RNC",
+    "acta_asamblea": "Acta de asamblea",
+    "cedula_representante": "Identidad del representante legal",
+    "ubo_identidad": "Beneficiario final (UBO)",
+    "bank": "Documento bancario",
+    "other": "Otro documento",
+}
+
+
 def _count_ubo_with_identity(db: Session, company_id: int) -> int:
     """Beneficiarios finales registrados con nombre e identificación (documento UBO)."""
     n = (
@@ -42,20 +68,6 @@ def _count_ubo_with_identity(db: Session, company_id: int) -> int:
         or 0
     )
     return int(n)
-
-
-DOCUMENT_TYPES = frozenset(
-    {
-        "ruc",
-        "registro_mercantil",
-        "rnc_documento",
-        "acta_asamblea",
-        "cedula_representante",
-        "ubo_identidad",
-        "bank",
-        "other",
-    }
-)
 
 
 def _can_access_company(user: models.User, company_id: int) -> bool:
@@ -97,6 +109,13 @@ def create_company_staff(
         kyc_status=KycStatus.draft.value,
     )
     db.add(c)
+    db.flush()
+    add_company_timeline_event(
+        db,
+        c.id,
+        "created",
+        f"Cliente «{c.legal_name}» registrado en el sistema",
+    )
     db.commit()
     db.refresh(c)
     return c
@@ -139,6 +158,12 @@ def submit_kyc_for_review(
             "investigar) con nombre completo y documento de identidad adjunto.",
         )
     c.kyc_status = KycStatus.submitted.value
+    add_company_timeline_event(
+        db,
+        c.id,
+        "kyc_submitted",
+        "Expediente KYC enviado a revisión por el cliente",
+    )
     db.commit()
     db.refresh(c)
     return c
@@ -158,6 +183,29 @@ def get_company(
     return c
 
 
+@router.get(
+    "/{company_id}/timeline",
+    response_model=list[CompanyTimelineEventOut],
+    summary="Línea de tiempo de actualizaciones del cliente",
+)
+def company_timeline(
+    company_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+) -> list[models.CompanyTimelineEvent]:
+    if not _can_access_company(user, company_id):
+        raise HTTPException(403, "Acceso denegado")
+    if not db.get(models.Company, company_id):
+        raise HTTPException(404, "Empresa no encontrada")
+    return list(
+        db.scalars(
+            select(models.CompanyTimelineEvent)
+            .where(models.CompanyTimelineEvent.company_id == company_id)
+            .order_by(models.CompanyTimelineEvent.id.asc())
+        )
+    )
+
+
 @router.patch(
     "/{company_id}",
     response_model=CompanyOut,
@@ -172,11 +220,20 @@ def update_company_general(
     c = db.get(models.Company, company_id)
     if not c:
         raise HTTPException(404, "Cliente no encontrado")
+    changed: list[str] = []
     for k, v in body.model_dump(exclude_unset=True).items():
         if v is not None and hasattr(c, k):
             if isinstance(v, str):
                 v = v.strip()
             setattr(c, k, v)
+            changed.append(k)
+    if changed:
+        add_company_timeline_event(
+            db,
+            company_id,
+            "general_updated",
+            "Datos generales actualizados: " + ", ".join(changed),
+        )
     db.commit()
     db.refresh(c)
     return c
@@ -196,13 +253,29 @@ def update_kyc(
     c = db.get(models.Company, company_id)
     if not c:
         raise HTTPException(404, "Empresa no encontrada")
-    for k, v in body.model_dump(exclude_unset=True).items():
+    prev = c.kyc_status
+    data = body.model_dump(exclude_unset=True)
+    for k, v in data.items():
         if v is not None and hasattr(c, k):
             setattr(c, k, v)
     if body.kyc_status == KycStatus.approved.value:
         c.approved_at = datetime.now(timezone.utc)
     elif body.kyc_status is not None and body.kyc_status != KycStatus.approved.value:
         c.approved_at = None
+    if "kyc_status" in data and data.get("kyc_status") is not None and data["kyc_status"] != prev:
+        add_company_timeline_event(
+            db,
+            company_id,
+            "kyc_status",
+            f"Estado KYC: {prev} → {data['kyc_status']}",
+        )
+    if "kyc_notes" in data and data.get("kyc_notes") and str(data["kyc_notes"]).strip():
+        add_company_timeline_event(
+            db,
+            company_id,
+            "kyc_note",
+            f"Nota KYC: {str(data['kyc_notes']).strip()[:200]}",
+        )
     db.commit()
     db.refresh(c)
     return c
@@ -245,6 +318,12 @@ def request_kyc_screening(
         "el resultado aparecerá en esta sección."
     )
     c.kyc_screening = screening
+    add_company_timeline_event(
+        db,
+        company_id,
+        "kyc_screening",
+        f"Solicitud de consulta en listas registrada (ref. {ref})",
+    )
     db.commit()
     db.refresh(c)
     return c
@@ -294,6 +373,13 @@ def upload_doc(
         party_name=pn,
     )
     db.add(doc)
+    db.flush()
+    label = DOC_TYPE_LABELS.get(dt, dt)
+    if dt == "ubo_identidad" and pn:
+        msg = f"Documento cargado: {label} — {pn}"
+    else:
+        msg = f"Documento cargado: {label}"
+    add_company_timeline_event(db, company_id, "document", msg)
     db.commit()
     db.refresh(doc)
     return doc

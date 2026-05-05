@@ -48,6 +48,16 @@ CREATE TABLE IF NOT EXISTS company_documents (
   CONSTRAINT fk_company_documents_company_id FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS company_timeline_events (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  company_id INT NOT NULL,
+  event_type VARCHAR(64) NOT NULL,
+  message VARCHAR(1024) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX ix_company_timeline_company_id (company_id),
+  CONSTRAINT fk_company_timeline_company_id FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS invoices (
   id INT AUTO_INCREMENT PRIMARY KEY,
   company_id INT NOT NULL,

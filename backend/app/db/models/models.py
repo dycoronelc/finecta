@@ -154,6 +154,26 @@ class Company(Base):
     documents: Mapped[list["CompanyDocument"]] = relationship(
         "CompanyDocument", back_populates="company", cascade="all, delete-orphan"
     )
+    timeline_events: Mapped[list["CompanyTimelineEvent"]] = relationship(
+        "CompanyTimelineEvent",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+
+
+class CompanyTimelineEvent(Base):
+    __tablename__ = "company_timeline_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(64))
+    message: Mapped[str] = mapped_column(String(1024))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    company: Mapped["Company"] = relationship("Company", back_populates="timeline_events")
 
 
 class CompanyDocument(Base):

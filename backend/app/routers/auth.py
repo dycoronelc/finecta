@@ -39,6 +39,14 @@ def _register_core(db: Session, body: RegisterCompany) -> models.User:
     )
     db.add(co)
     db.flush()
+    from app.services.company_timeline import add_company_timeline_event
+
+    add_company_timeline_event(
+        db,
+        co.id,
+        "created",
+        f"Empresa «{co.legal_name}» registrada (autoregistro portal)",
+    )
     u = models.User(
         email=body.admin_email,
         hashed_password=security.get_password_hash(body.password),

@@ -25,6 +25,7 @@ def create_tables() -> None:
     _ensure_invoice_payer_tax_id_column()
     _ensure_company_client_columns()
     _ensure_company_document_party_name()
+    _ensure_company_timeline_table()
 
 
 def _ensure_invoice_payer_tax_id_column() -> None:
@@ -68,6 +69,50 @@ def _ensure_company_client_columns() -> None:
             conn.execute(text(ddl))
 
 
+def _ensure_company_timeline_table() -> None:
+    insp = inspect(engine)
+    if "company_timeline_events" in insp.get_table_names():
+        return
+    sqlite = settings.database_url.startswith("sqlite")
+    with engine.begin() as conn:
+        if sqlite:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE company_timeline_events (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        company_id INTEGER NOT NULL,
+                        event_type VARCHAR(64) NOT NULL,
+                        message VARCHAR(1024) NOT NULL,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_company_timeline_company_id ON company_timeline_events(company_id)"
+                )
+            )
+        else:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE company_timeline_events (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        company_id INT NOT NULL,
+                        event_type VARCHAR(64) NOT NULL,
+                        message VARCHAR(1024) NOT NULL,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        INDEX ix_company_timeline_company_id (company_id),
+                        CONSTRAINT fk_company_timeline_company_id FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    """
+                )
+            )
+
+
 def _ensure_company_document_party_name() -> None:
     insp = inspect(engine)
     if "company_documents" not in insp.get_table_names():
@@ -106,6 +151,20 @@ def seed_if_empty() -> None:
         )
         db.add_all([c_demo, c_pending])
         db.flush()
+        from app.services.company_timeline import add_company_timeline_event
+
+        add_company_timeline_event(
+            db,
+            c_demo.id,
+            "created",
+            "Cliente «Comercial Demo SRL» registrado en el sistema",
+        )
+        add_company_timeline_event(
+            db,
+            c_pending.id,
+            "created",
+            "Cliente «Importadora BETA SRL» registrado en el sistema",
+        )
         u_admin = models.User(
             email="admin@finecta.com",
             hashed_password=get_password_hash("Admin123!"),

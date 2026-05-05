@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { FilePicker } from "../components/ui/FilePicker";
 import { StatusBadge } from "../components/ui/StatusBadge";
+import { fmtDateShort } from "../lib/format";
 
 type Company = {
   id: number;
@@ -31,6 +32,13 @@ type Doc = {
   uploaded_at: string;
 };
 
+type TimelineEv = {
+  id: number;
+  event_type: string;
+  message: string;
+  created_at: string;
+};
+
 /** Expediente societario / legal — recomendado; el KYC en listas se centra en los UBO. */
 const EXPEDIENTE_DOCS: { type: string; label: string }[] = [
   { type: "registro_mercantil", label: "Certificado de Registro Mercantil" },
@@ -50,6 +58,7 @@ export function ClientDetailPage() {
   const [busy, setBusy] = useState(false);
   const [co, setCo] = useState<Company | null>(null);
   const [docs, setDocs] = useState<Doc[]>([]);
+  const [timeline, setTimeline] = useState<TimelineEv[]>([]);
 
   const [legal_name, setLegalName] = useState("");
   const [trade_name, setTradeName] = useState("");
@@ -65,6 +74,15 @@ export function ClientDetailPage() {
   const loadDocs = useCallback(async (companyId: number) => {
     const d = await api<Doc[]>(`/companies/${companyId}/documents`);
     setDocs(d);
+  }, []);
+
+  const loadTimeline = useCallback(async (companyId: number) => {
+    try {
+      const t = await api<TimelineEv[]>(`/companies/${companyId}/timeline`);
+      setTimeline(t);
+    } catch {
+      setTimeline([]);
+    }
   }, []);
 
   const applyCompany = useCallback((c: Company) => {
@@ -87,6 +105,7 @@ export function ClientDetailPage() {
       setContactEmail("");
       setPhone("");
       setContactFullName("");
+      setTimeline([]);
       return;
     }
     const cid = Number(id);
@@ -95,10 +114,15 @@ export function ClientDetailPage() {
       return;
     }
     setErr(null);
-    Promise.all([api<Company>(`/companies/${cid}`), api<Doc[]>(`/companies/${cid}/documents`)])
-      .then(([c, d]) => {
+    Promise.all([
+      api<Company>(`/companies/${cid}`),
+      api<Doc[]>(`/companies/${cid}/documents`),
+      api<TimelineEv[]>(`/companies/${cid}/timeline`),
+    ])
+      .then(([c, d, t]) => {
         applyCompany(c);
         setDocs(d);
+        setTimeline(t);
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
   }, [id, isNew, applyCompany]);
@@ -135,6 +159,7 @@ export function ClientDetailPage() {
         },
       });
       applyCompany(c);
+      await loadTimeline(c.id);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error");
     } finally {
@@ -152,6 +177,7 @@ export function ClientDetailPage() {
       fd.append("document_type", docType);
       await api(`/companies/${co.id}/documents`, { method: "POST", formData: fd });
       await loadDocs(co.id);
+      await loadTimeline(co.id);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error");
     } finally {
@@ -175,6 +201,7 @@ export function ClientDetailPage() {
       setUboFile(null);
       setUboName("");
       await loadDocs(co.id);
+      await loadTimeline(co.id);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error");
     } finally {
@@ -189,6 +216,7 @@ export function ClientDetailPage() {
     try {
       const c = await api<Company>(`/companies/${co.id}/kyc-screening/request`, { method: "POST" });
       applyCompany(c);
+      await loadTimeline(co.id);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error");
     } finally {
@@ -213,6 +241,7 @@ export function ClientDetailPage() {
       const c = await api<Company>(`/companies/${co.id}/kyc`, { method: "PATCH", json: body });
       applyCompany(c);
       setRejectNotes("");
+      await loadTimeline(co.id);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error");
     } finally {
@@ -259,49 +288,69 @@ export function ClientDetailPage() {
       </div>
 
       {tab === "general" && (
-        <div className="f-panel mt-4 space-y-4 max-w-2xl">
-          <p className="text-sm text-zinc-600">
-            Datos del cliente. El RUC/RIF identifica al contribuyente; el contacto principal es la persona de
-            referencia ante Finecta.
-          </p>
-          <div>
-            <label className="text-xs text-zinc-500">Nombre de la empresa / razón social</label>
-            <input className="f-input mt-1 w-full" value={legal_name} onChange={(e) => setLegalName(e.target.value)} required />
+        <div className="mt-4 space-y-4 w-full min-w-0">
+          <div className="f-panel w-full min-w-0 space-y-4">
+            <p className="text-sm text-zinc-600">
+              Datos del cliente. El RUC/RIF identifica al contribuyente; el contacto principal es la persona de
+              referencia ante Finecta.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="min-w-0 sm:col-span-2 lg:col-span-2">
+                <label className="text-xs text-zinc-500">Nombre de la empresa / razón social</label>
+                <input className="f-input mt-1 w-full" value={legal_name} onChange={(e) => setLegalName(e.target.value)} required />
+              </div>
+              <div className="min-w-0">
+                <label className="text-xs text-zinc-500">Nombre comercial (opcional)</label>
+                <input className="f-input mt-1 w-full" value={trade_name} onChange={(e) => setTradeName(e.target.value)} />
+              </div>
+              <div className="min-w-0">
+                <label className="text-xs text-zinc-500">RUC / RIF</label>
+                <input className="f-input mt-1 w-full font-mono text-sm" value={tax_id} onChange={(e) => setTaxId(e.target.value)} required />
+              </div>
+              <div className="min-w-0 sm:col-span-2">
+                <label className="text-xs text-zinc-500">Nombre y apellidos del contacto principal</label>
+                <input className="f-input mt-1 w-full" value={contact_full_name} onChange={(e) => setContactFullName(e.target.value)} required />
+              </div>
+              <div className="min-w-0">
+                <label className="text-xs text-zinc-500">Teléfono</label>
+                <input className="f-input mt-1 w-full" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              </div>
+              <div className="min-w-0 sm:col-span-2">
+                <label className="text-xs text-zinc-500">Correo electrónico</label>
+                <input className="f-input mt-1 w-full" type="email" value={contact_email} onChange={(e) => setContactEmail(e.target.value)} required />
+              </div>
+            </div>
+            <button type="button" className="f-btn-primary text-sm" disabled={busy} onClick={() => void saveGeneral()}>
+              {isNew ? "Crear cliente" : "Guardar cambios"}
+            </button>
           </div>
-          <div>
-            <label className="text-xs text-zinc-500">Nombre comercial (opcional)</label>
-            <input className="f-input mt-1 w-full" value={trade_name} onChange={(e) => setTradeName(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-zinc-500">RUC / RIF</label>
-            <input className="f-input mt-1 w-full font-mono text-sm" value={tax_id} onChange={(e) => setTaxId(e.target.value)} required />
-          </div>
-          <div>
-            <label className="text-xs text-zinc-500">Nombre y apellidos del contacto principal</label>
-            <input className="f-input mt-1 w-full" value={contact_full_name} onChange={(e) => setContactFullName(e.target.value)} required />
-          </div>
-          <div>
-            <label className="text-xs text-zinc-500">Teléfono</label>
-            <input className="f-input mt-1 w-full" value={phone} onChange={(e) => setPhone(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-zinc-500">Correo electrónico</label>
-            <input className="f-input mt-1 w-full" type="email" value={contact_email} onChange={(e) => setContactEmail(e.target.value)} required />
-          </div>
-          <button type="button" className="f-btn-primary text-sm" disabled={busy} onClick={() => void saveGeneral()}>
-            {isNew ? "Crear cliente" : "Guardar cambios"}
-          </button>
+
+          {co && !isNew && (
+            <div className="f-panel w-full min-w-0">
+              <h2 className="text-base font-semibold text-zinc-900">Línea de tiempo</h2>
+              <p className="text-xs text-zinc-500 mt-1 mb-4">Actualizaciones y acciones registradas para este cliente.</p>
+              <ul className="space-y-3">
+                {[...timeline].reverse().map((ev) => (
+                  <li key={ev.id} className="text-sm leading-relaxed">
+                    <span className="font-medium text-blue-700 tabular-nums">{fmtDateShort(ev.created_at)}</span>
+                    <span className="text-zinc-600"> {ev.message}</span>
+                  </li>
+                ))}
+                {timeline.length === 0 && <li className="text-sm text-zinc-500">Sin eventos registrados.</li>}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
       {tab === "docs" && !co && (
-        <div className="f-panel mt-4 text-sm text-zinc-600 max-w-xl">
+        <div className="f-panel mt-4 text-sm text-zinc-600 w-full min-w-0 max-w-xl">
           Guarde primero los <strong>datos generales</strong> para crear el cliente y poder adjuntar documentación.
         </div>
       )}
 
       {tab === "docs" && co && (
-        <div className="f-panel mt-4 space-y-8 max-w-3xl">
+        <div className="f-panel mt-4 space-y-8 w-full min-w-0">
           <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-4 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-orange-900">KYC — obligatorio</span>
@@ -363,13 +412,13 @@ export function ClientDetailPage() {
       )}
 
       {tab === "kyc" && !co && (
-        <div className="f-panel mt-4 text-sm text-zinc-600 max-w-xl">
+        <div className="f-panel mt-4 text-sm text-zinc-600 w-full min-w-0 max-w-xl">
           Guarde primero los <strong>datos generales</strong> para crear el cliente y gestionar KYC.
         </div>
       )}
 
       {tab === "kyc" && co && (
-        <div className="f-panel mt-4 space-y-4 max-w-3xl">
+        <div className="f-panel mt-4 space-y-4 w-full min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-zinc-600">Estado actual:</span>
             <StatusBadge status={co.kyc_status} />

@@ -18,3 +18,15 @@ export function fmtDate(iso: string | null | undefined) {
     day: "numeric",
   });
 }
+
+/** Fecha corta tipo 04/05/2026 para líneas de tiempo */
+export function fmtDateShort(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("es-DO", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
