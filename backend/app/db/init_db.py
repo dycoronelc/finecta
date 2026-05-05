@@ -23,6 +23,7 @@ def ensure_uploads() -> None:
 def create_tables() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_invoice_payer_tax_id_column()
+    _migrate_legacy_invoice_payers_to_fk()
 
 
 def _ensure_invoice_payer_tax_id_column() -> None:
@@ -38,6 +39,50 @@ def _ensure_invoice_payer_tax_id_column() -> None:
         ddl = "ALTER TABLE invoices ADD COLUMN payer_tax_id VARCHAR(64)"
     with engine.begin() as conn:
         conn.execute(text(ddl))
+
+
+def _migrate_legacy_invoice_payers_to_fk() -> None:
+    """BD antigua: columnas payer / payer_tax_id en texto → payer_id + tabla payers."""
+    insp = inspect(engine)
+    tables = insp.get_table_names()
+    if "invoices" not in tables:
+        return
+    if "payers" not in tables:
+        from app.db.models.models import Payer  # noqa: F401
+
+        Payer.__table__.create(bind=engine, checkfirst=True)
+    cols = {c["name"] for c in insp.get_columns("invoices")}
+    if "payer_id" in cols:
+        return
+    if "payer" not in cols:
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE invoices ADD COLUMN payer_id INTEGER"))
+    from app.services.payer_resolution import get_or_create_payer_for_extraction
+
+    db = SessionLocal()
+    try:
+        raw = db.execute(text("SELECT id, payer, payer_tax_id FROM invoices")).fetchall()
+        cache: dict[tuple[str, str], int] = {}
+        for row in raw:
+            rid = int(row[0])
+            payer_s = row[1]
+            ptid = row[2]
+            pkey = ((payer_s or "").strip(), (ptid or "").strip())
+            if pkey not in cache:
+                pay = get_or_create_payer_for_extraction(
+                    db, pkey[0] or "Sin nombre", pkey[1] or None
+                )
+                db.flush()
+                cache[pkey] = pay.id
+            pid = cache[pkey]
+            db.execute(
+                text("UPDATE invoices SET payer_id = :pid WHERE id = :id"),
+                {"pid": pid, "id": rid},
+            )
+        db.commit()
+    finally:
+        db.close()
 
 
 def seed_if_empty() -> None:

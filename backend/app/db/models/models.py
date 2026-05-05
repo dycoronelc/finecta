@@ -159,6 +159,28 @@ class Client(Base):
     )
 
 
+class Payer(Base):
+    """Pagador / deudor de facturas (persona jurídica). Catálogo independiente del cliente (emisor)."""
+
+    __tablename__ = "payers"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    legal_name: Mapped[str] = mapped_column(String(512))
+    trade_name: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    tax_id: Mapped[str] = mapped_column(String(64), index=True)
+    contact_email: Mapped[str] = mapped_column(String(255))
+    phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    contact_full_name: Mapped[str] = mapped_column(
+        String(255), default="", doc="Nombre y apellidos del contacto principal"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    invoices: Mapped[list["Invoice"]] = relationship(
+        "Invoice", back_populates="payer"
+    )
+
+
 class BeneficialOwner(Base):
     """Beneficiario final (persona física). Puede vincularse a varios clientes."""
 
@@ -270,16 +292,15 @@ class BeneficialOwnerDocument(Base):
 
 class Invoice(Base):
     __tablename__ = "invoices"
-    __table_args__ = (Index("ix_invoices_client_payer", "client_id", "payer"),)
+    __table_args__ = (Index("ix_invoices_client_payer", "client_id", "payer_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"))
+    payer_id: Mapped[int] = mapped_column(
+        ForeignKey("payers.id", ondelete="RESTRICT"), index=True
+    )
     invoice_number: Mapped[str] = mapped_column(String(128), index=True)
     issuer: Mapped[str] = mapped_column(String(512))
-    payer: Mapped[str] = mapped_column(String(512))
-    payer_tax_id: Mapped[Optional[str]] = mapped_column(
-        String(64), nullable=True, index=True, doc="RNC u otro ID del pagador (varios pagadores por emisor)"
-    )
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
     due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(
@@ -295,6 +316,7 @@ class Invoice(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
     client: Mapped[Client] = relationship("Client")
+    payer: Mapped["Payer"] = relationship("Payer", back_populates="invoices")
     operation_links: Mapped[list["OperationInvoice"]] = relationship(
         "OperationInvoice", back_populates="invoice"
     )

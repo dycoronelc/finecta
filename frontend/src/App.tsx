@@ -15,6 +15,8 @@ import { ValidationPage } from "./pages/ValidationPage";
 import { QuotationsPage } from "./pages/QuotationsPage";
 import { ClientsPage } from "./pages/ClientsPage";
 import { ClientDetailPage } from "./pages/ClientDetailPage";
+import { PayersPage } from "./pages/PayersPage";
+import { PayerDetailPage } from "./pages/PayerDetailPage";
 import { FiduciaryPage } from "./pages/FiduciaryPage";
 import { LandingPage } from "./pages/LandingPage";
 
@@ -54,6 +56,9 @@ function AppRoutes() {
         <Route path="clientes" element={<ClientsPage />} />
         <Route path="clientes/nuevo" element={<ClientDetailPage />} />
         <Route path="clientes/:id" element={<ClientDetailPage />} />
+        <Route path="pagadores" element={<PayersPage />} />
+        <Route path="pagadores/nuevo" element={<PayerDetailPage />} />
+        <Route path="pagadores/:id" element={<PayerDetailPage />} />
         <Route path="facturas" element={<InvoicesPage />} />
         <Route path="cotizaciones" element={<QuotationsPage />} />
         <Route path="operaciones" element={<OperationsPage />} />

@@ -20,12 +20,14 @@ type Ev = {
   created_at: string;
 };
 
+type InvPayer = { id: number; legal_name: string; tax_id: string };
+
 type Inv = {
   id: number;
   invoice_number: string;
   issuer: string;
-  payer: string;
-  payer_tax_id?: string | null;
+  payer_id: number;
+  payer: InvPayer;
   amount: string;
   due_date: string | null;
   status: string;
@@ -78,7 +80,8 @@ export function OperationDetailPage() {
   const payerSuggestions = useMemo(() => {
     const s = new Set<string>();
     for (const i of inv) {
-      if (i.payer && i.payer !== "—") s.add(i.payer);
+      const n = i.payer?.legal_name?.trim();
+      if (n && n !== "—") s.add(n);
     }
     return [...s].sort();
   }, [inv]);
@@ -106,9 +109,9 @@ export function OperationDetailPage() {
 
   useEffect(() => {
     if (defaultPayerDone.current || !inv.length) return;
-    const first = inv.find((x) => x.payer && x.payer !== "—");
-    if (first) {
-      setPPayer(first.payer);
+    const first = inv.find((x) => x.payer?.legal_name && x.payer.legal_name !== "—");
+    if (first?.payer) {
+      setPPayer(first.payer.legal_name);
       defaultPayerDone.current = true;
     }
   }, [inv]);
@@ -323,9 +326,9 @@ export function OperationDetailPage() {
               <li key={i.id} className="flex justify-between gap-2 border-b border-zinc-100 pb-2">
                 <div className="min-w-0">
                   <p className="font-mono text-xs">{i.invoice_number}</p>
-                  <p className="text-zinc-500 text-xs line-clamp-1">Pagador: {i.payer}</p>
-                  {i.payer_tax_id && (
-                    <p className="text-zinc-400 text-[10px] font-mono">RNC pagador: {i.payer_tax_id}</p>
+                  <p className="text-zinc-500 text-xs line-clamp-1">Pagador: {i.payer?.legal_name ?? "—"}</p>
+                  {i.payer?.tax_id && (
+                    <p className="text-zinc-400 text-[10px] font-mono">RNC pagador: {i.payer.tax_id}</p>
                   )}
                 </div>
                 <div className="text-right text-xs shrink-0">

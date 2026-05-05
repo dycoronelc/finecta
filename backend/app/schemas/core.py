@@ -138,14 +138,67 @@ class ClientTimelineEventOut(BaseModel):
         from_attributes = True
 
 
+# --- Payer (pagador / deudor de facturas) ---
+class PayerStaffCreate(BaseModel):
+    """Alta de pagador por Finecta (catálogo de deudores)."""
+
+    legal_name: str
+    trade_name: str | None = None
+    tax_id: str
+    contact_email: str
+    phone: str | None = None
+    contact_full_name: str = Field(..., min_length=2, description="Nombre y apellidos del contacto principal")
+
+
+class PayerGeneralUpdate(BaseModel):
+    legal_name: str | None = None
+    trade_name: str | None = None
+    tax_id: str | None = None
+    contact_email: str | None = None
+    phone: str | None = None
+    contact_full_name: str | None = None
+
+
+class PayerOut(BaseModel):
+    id: int
+    legal_name: str
+    trade_name: str | None
+    tax_id: str
+    contact_email: str
+    phone: str | None
+    contact_full_name: str = ""
+    created_at: datetime
+
+    @field_validator("contact_full_name", mode="before")
+    @classmethod
+    def _empty_contact_payer(cls, v: object) -> str:
+        if v is None:
+            return ""
+        return str(v).strip()
+
+    class Config:
+        from_attributes = True
+
+
+class InvoicePayerSummary(BaseModel):
+    """Datos mínimos del pagador vinculado a la factura."""
+
+    id: int
+    legal_name: str
+    tax_id: str
+
+    class Config:
+        from_attributes = True
+
+
 # --- Invoices ---
 class InvoiceOut(BaseModel):
     id: int
     client_id: int
+    payer_id: int
+    payer: InvoicePayerSummary
     invoice_number: str
     issuer: str
-    payer: str
-    payer_tax_id: str | None = None
     amount: Decimal
     due_date: date | None
     status: str
@@ -158,17 +211,17 @@ class InvoiceOut(BaseModel):
 
 
 class InvoicePayerFilterOption(BaseModel):
-    """Valores distintos de pagador por empresa (un emisor puede tener muchos pagadores)."""
+    """Pagadores distintos que aparecen en facturas del cliente (para filtros)."""
 
-    payer: str
-    payer_tax_id: str | None = None
+    id: int
+    legal_name: str
+    tax_id: str
 
 
 class InvoiceUpdate(BaseModel):
     invoice_number: str | None = None
     issuer: str | None = None
-    payer: str | None = None
-    payer_tax_id: str | None = None
+    payer_id: int | None = None
     amount: Decimal | None = None
     due_date: date | None = None
     status: str | None = None
@@ -203,6 +256,18 @@ class QuotationOut(BaseModel):
 class QuotationResponse(BaseModel):
     accept: bool
     comment: str | None = None
+
+
+class QuotationUpdate(BaseModel):
+    """Actualización staff de cotización (importes y anulación de pendientes)."""
+
+    amount_base: Decimal | None = None
+    commission: Decimal | None = None
+    operational_cost: Decimal | None = None
+    status: str | None = Field(
+        None,
+        description="Solo transiciones desde pending, p. ej. expired para anular por Finecta",
+    )
 
 
 # --- Operations ---

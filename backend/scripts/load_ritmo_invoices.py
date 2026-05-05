@@ -38,6 +38,7 @@ from app.db.models.models import (
     UserRole,
 )
 from app.db.session import SessionLocal
+from app.services.payer_resolution import get_or_create_payer_for_extraction
 from app.services.ritmo_excel_import import parse_ritmo_facturas_excel
 
 EXCEL = ROOT / "docs" / "facturas_ritmo_2026-04-22.xlsx"
@@ -122,6 +123,8 @@ def run() -> None:
             ).scalars().all()
         )
         have = {str(n) for n in ex if n}
+        pay_ritmo = get_or_create_payer_for_extraction(db, PAYER_NAME, None)
+        db.flush()
         n_ins = 0
         n_skip = 0
         for r in rows:
@@ -140,9 +143,9 @@ def run() -> None:
             }
             inv = Invoice(
                 client_id=co.id,
+                payer_id=pay_ritmo.id,
                 invoice_number=r.n_factura[:120],
                 issuer=r.proveedor[:500],
-                payer=PAYER_NAME[:500],
                 amount=r.total,
                 due_date=r.vencimiento,
                 status=_map_status(r.estado),

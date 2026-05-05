@@ -91,13 +91,24 @@ CREATE TABLE IF NOT EXISTS client_timeline_events (
   CONSTRAINT fk_client_timeline_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS payers (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  legal_name VARCHAR(512) NOT NULL,
+  trade_name VARCHAR(512) NULL,
+  tax_id VARCHAR(64) NOT NULL,
+  contact_email VARCHAR(255) NOT NULL,
+  phone VARCHAR(64) NULL,
+  contact_full_name VARCHAR(255) NOT NULL DEFAULT '',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX ix_payers_tax_id (tax_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS invoices (
   id INT AUTO_INCREMENT PRIMARY KEY,
   client_id INT NOT NULL,
+  payer_id INT NOT NULL,
   invoice_number VARCHAR(128) NOT NULL,
   issuer VARCHAR(512) NOT NULL,
-  payer VARCHAR(512) NOT NULL,
-  payer_tax_id VARCHAR(64) NULL,
   amount NUMERIC(18,2) NOT NULL,
   due_date DATE NULL,
   status ENUM('draft', 'uploaded', 'in_quotation', 'in_operation', 'in_collection', 'paid', 'closed', 'rejected') NOT NULL DEFAULT 'draft',
@@ -106,9 +117,10 @@ CREATE TABLE IF NOT EXISTS invoices (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NULL,
   INDEX ix_invoices_invoice_number (invoice_number),
-  INDEX ix_invoices_payer_tax_id (payer_tax_id),
-  INDEX ix_invoices_client_payer (client_id, payer),
-  CONSTRAINT fk_invoices_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+  INDEX ix_invoices_payer_id (payer_id),
+  INDEX ix_invoices_client_payer (client_id, payer_id),
+  CONSTRAINT fk_invoices_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+  CONSTRAINT fk_invoices_payer FOREIGN KEY (payer_id) REFERENCES payers(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS quotations (

@@ -10,6 +10,7 @@ from app.db.init_db import create_tables, ensure_uploads, seed_if_empty
 from app.routers import (
     auth,
     clients,
+    payers,
     collections,
     contracts,
     dashboard,
@@ -57,6 +58,7 @@ v1 = settings.API_V1
 app.include_router(auth.router, prefix=v1)
 app.include_router(dashboard.router, prefix=v1)
 app.include_router(clients.router, prefix=v1)
+app.include_router(payers.router, prefix=v1)
 app.include_router(invoices.router, prefix=v1)
 app.include_router(quotations.router, prefix=v1)
 app.include_router(operations.router, prefix=v1)

@@ -9,7 +9,7 @@ from typing import Any
 
 from openpyxl import load_workbook
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.db import models
 from app.db.models.models import Invoice, InvoiceStatus
@@ -47,15 +47,16 @@ def _pick_invoice_for_row(found: list[Invoice], row: RowInfo) -> Invoice | None:
     row_digits = _digits_only(row_p)
     if row_digits:
         for inv in found:
-            inv_d = _digits_only(inv.payer_tax_id)
+            inv_d = _digits_only(inv.payer.tax_id if inv.payer else None)
             if inv_d and inv_d == row_digits:
                 return inv
-            if row_digits in _digits_only(inv.payer) or _digits_only(inv.payer) in row_digits:
+            pl = inv.payer.legal_name if inv.payer else ""
+            if row_digits in _digits_only(pl) or _digits_only(pl) in row_digits:
                 return inv
     if row_p:
         rn = _norm_payer_name(row_p)
         for inv in found:
-            pn = _norm_payer_name(inv.payer or "")
+            pn = _norm_payer_name(inv.payer.legal_name if inv.payer else "")
             if rn in pn or pn in rn:
                 return inv
     return None
@@ -145,7 +146,11 @@ class MatchItem:
 def run_matching(
     db: Session, client_id: int, rows: list[RowInfo]
 ) -> dict[str, Any]:
-    q = select(Invoice).where(Invoice.client_id == client_id)
+    q = (
+        select(Invoice)
+        .where(Invoice.client_id == client_id)
+        .options(selectinload(Invoice.payer))
+    )
     invoices = list(db.scalars(q).all())
     by_num: dict[str, list[Invoice]] = {}
     for inv in invoices:
@@ -186,11 +191,12 @@ def run_matching(
             )
             continue
         used_ids.add(inv.id)
-        if row.payer and inv.payer:
-            if _norm_num(row.payer) not in _norm_num(inv.payer) and _norm_num(
-                inv.payer
+        inv_pl = inv.payer.legal_name if inv.payer else ""
+        if row.payer and inv_pl:
+            if _norm_num(row.payer) not in _norm_num(inv_pl) and _norm_num(
+                inv_pl
             ) not in _norm_num(row.payer):
-                if row.payer[:3].upper() != inv.payer[:3].upper():
+                if row.payer[:3].upper() != inv_pl[:3].upper():
                     matches.append(
                         MatchItem(
                             kind="invalid_payer",

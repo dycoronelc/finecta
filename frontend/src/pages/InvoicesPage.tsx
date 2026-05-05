@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { money, fmtDate } from "../lib/format";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { FilePicker } from "../components/ui/FilePicker";
 
+type InvPayer = { id: number; legal_name: string; tax_id: string };
+
 type Inv = {
   id: number;
   invoice_number: string;
   issuer: string;
-  payer: string;
-  payer_tax_id?: string | null;
+  payer_id: number;
+  payer: InvPayer;
   amount: string;
   due_date: string | null;
   status: string;
@@ -19,16 +22,19 @@ type Inv = {
 
 type Co = { id: number; legal_name: string };
 
-type PayerOpt = { payer: string; payer_tax_id: string | null };
+type PayerOpt = { id: number; legal_name: string; tax_id: string };
 
 export function InvoicesPage() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const staff = user?.role === "admin" || user?.role === "analyst";
   const [rows, setRows] = useState<Inv[]>([]);
   const [clients, setClients] = useState<Co[]>([]);
+  const [allPayers, setAllPayers] = useState<PayerOpt[]>([]);
   const [clientId, setClientId] = useState("");
   const [payerOpts, setPayerOpts] = useState<PayerOpt[]>([]);
   const [payerPick, setPayerPick] = useState("");
+  const [uploadPayerId, setUploadPayerId] = useState("");
   const [q, setQ] = useState("");
   const [st, setSt] = useState<string | "">("");
   const [err, setErr] = useState<string | null>(null);
@@ -43,10 +49,22 @@ export function InvoicesPage() {
   }, [staff]);
 
   useEffect(() => {
+    if (!staff) return;
+    api<PayerOpt[]>("/payers")
+      .then(setAllPayers)
+      .catch(() => setAllPayers([]));
+  }, [staff]);
+
+  useEffect(() => {
+    const fromUrl = searchParams.get("client_id");
+    if (!staff || !fromUrl) return;
+    if (/^\d+$/.test(fromUrl)) setClientId(fromUrl);
+  }, [staff, searchParams]);
+
+  useEffect(() => {
     const run = async () => {
       if (staff && !clientId) {
-        setPayerOpts([]);
-        setPayerPick("");
+        setPayerOpts(allPayers);
         return;
       }
       try {
@@ -61,20 +79,14 @@ export function InvoicesPage() {
       }
     };
     void run();
-  }, [staff, clientId, user?.client_id]);
+  }, [staff, clientId, user?.client_id, allPayers]);
 
   async function load() {
     const p = new URLSearchParams();
     if (q) p.set("q", q);
     if (st) p.set("status", st);
     if (staff && clientId) p.set("client_id", clientId);
-    if (payerPick) {
-      const opt = payerOpts.find(
-        (o) => `${o.payer}||${o.payer_tax_id ?? ""}` === payerPick
-      );
-      if (opt?.payer_tax_id) p.set("payer_tax_id", opt.payer_tax_id);
-      else if (opt) p.set("payer", opt.payer);
-    }
+    if (payerPick) p.set("payer_id", payerPick);
     setErr(null);
     const data = await api<Inv[]>(`/invoices?${p.toString()}`);
     setRows(data);
@@ -83,7 +95,7 @@ export function InvoicesPage() {
   useEffect(() => {
     load().catch((e) => setErr(e instanceof Error ? e.message : "Error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [st, clientId, staff, user?.client_id]);
+  }, [st, clientId, staff, user?.client_id, payerPick]);
 
   async function upload() {
     if (!file) return;
@@ -93,8 +105,9 @@ export function InvoicesPage() {
     try {
       const p = new URLSearchParams();
       if (staff && clientId) p.set("client_id", clientId);
-      const qstr = p.toString();
-      await api<Inv>(`/invoices${qstr ? `?${qstr}` : ""}`, { method: "POST", formData: fd });
+      if (staff && uploadPayerId) p.set("payer_id", uploadPayerId);
+      const qs = p.toString();
+      await api<Inv>(`/invoices${qs ? `?${qs}` : ""}`, { method: "POST", formData: fd });
       setFile(null);
       await load();
     } catch (e) {
@@ -106,7 +119,7 @@ export function InvoicesPage() {
     <div className="f-page w-full min-w-0">
       <h1 className="text-2xl font-bold text-zinc-900">Facturas</h1>
       <p className="text-sm text-zinc-600 max-w-3xl mt-1">
-        Cada factura tiene su propio pagador; un mismo cliente puede tener cartera con varios pagadores.
+        Cada factura tiene un pagador del catálogo; un mismo cliente puede tener cartera con varios pagadores.
         Use el filtro por empresa (Finecta) y por pagador para revisar bloques de riesgo.
       </p>
       {canUpload && (
@@ -132,6 +145,23 @@ export function InvoicesPage() {
               <p className="text-[11px] text-zinc-500 mt-1">
                 Si no elige empresa, la factura se asocia a la suya solo en rol cliente; en staff debe elegir empresa.
               </p>
+            </div>
+          )}
+          {staff && clientId && (
+            <div className="w-full max-w-md">
+              <p className="text-xs text-zinc-500 mb-1">Pagador (opcional; si no elige, se infiere del PDF)</p>
+              <select
+                className="f-input w-full text-sm"
+                value={uploadPayerId}
+                onChange={(e) => setUploadPayerId(e.target.value)}
+              >
+                <option value="">— Inferir del PDF / catálogo —</option>
+                {allPayers.map((py) => (
+                  <option key={py.id} value={String(py.id)}>
+                    {py.legal_name} · {py.tax_id}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
           <FilePicker
@@ -180,16 +210,12 @@ export function InvoicesPage() {
                   className="f-input w-full text-sm"
                   value={payerPick}
                   onChange={(e) => setPayerPick(e.target.value)}
-                  disabled={staff && !clientId}
                 >
                   <option value="">Todos los pagadores</option>
                   {payerOpts.map((o) => (
-                    <option
-                      key={`${o.payer}-${o.payer_tax_id ?? ""}`}
-                      value={`${o.payer}||${o.payer_tax_id ?? ""}`}
-                    >
-                      {o.payer}
-                      {o.payer_tax_id ? ` · RNC ${o.payer_tax_id}` : ""}
+                    <option key={o.id} value={String(o.id)}>
+                      {o.legal_name}
+                      {o.tax_id ? ` · RNC ${o.tax_id}` : ""}
                     </option>
                   ))}
                 </select>
@@ -206,12 +232,9 @@ export function InvoicesPage() {
               >
                 <option value="">Todos los pagadores</option>
                 {payerOpts.map((o) => (
-                  <option
-                    key={`${o.payer}-${o.payer_tax_id ?? ""}`}
-                    value={`${o.payer}||${o.payer_tax_id ?? ""}`}
-                  >
-                    {o.payer}
-                    {o.payer_tax_id ? ` · RNC ${o.payer_tax_id}` : ""}
+                  <option key={o.id} value={String(o.id)}>
+                    {o.legal_name}
+                    {o.tax_id ? ` · RNC ${o.tax_id}` : ""}
                   </option>
                 ))}
               </select>
@@ -260,9 +283,9 @@ export function InvoicesPage() {
                   <td className="py-2.5 pr-3 font-mono text-xs">{r.invoice_number}</td>
                   <td className="py-2.5 pr-3 text-zinc-700">
                     <div className="line-clamp-1">{r.issuer}</div>
-                    <div className="text-xs text-zinc-500 line-clamp-1">{r.payer}</div>
-                    {r.payer_tax_id && (
-                      <div className="text-[10px] font-mono text-zinc-400">RNC pagador: {r.payer_tax_id}</div>
+                    <div className="text-xs text-zinc-500 line-clamp-1">{r.payer?.legal_name ?? "—"}</div>
+                    {r.payer?.tax_id && (
+                      <div className="text-[10px] font-mono text-zinc-400">RNC pagador: {r.payer.tax_id}</div>
                     )}
                   </td>
                   <td className="py-2.5 pr-3 tabular-nums">{money(r.amount)}</td>

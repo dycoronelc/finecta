@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { api, base } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 import { FilePicker } from "../components/ui/FilePicker";
 import { StatusBadge } from "../components/ui/StatusBadge";
-import { fmtDateShort } from "../lib/format";
+import { fmtDate, fmtDateShort, money } from "../lib/format";
 
 type BeneficialOwnerRow = {
   id: number;
@@ -49,6 +50,35 @@ type TimelineEv = {
   created_at: string;
 };
 
+type ClientInvPayer = { id: number; legal_name: string; tax_id: string };
+
+type ClientInvRow = {
+  id: number;
+  invoice_number: string;
+  issuer: string;
+  payer_id: number;
+  payer: ClientInvPayer;
+  amount: string;
+  due_date: string | null;
+  status: string;
+  pdf_path?: string | null;
+  created_at: string;
+};
+
+type PayerCatalogRow = { id: number; legal_name: string; tax_id: string };
+
+type ClientQuotRow = {
+  id: number;
+  client_id: number;
+  invoice_id: number | null;
+  amount_base: string;
+  commission: string;
+  operational_cost: string;
+  status: string;
+  client_comment: string | null;
+  created_at: string;
+};
+
 function parseRouteClientId(param: string | undefined): number | null {
   if (param == null) return null;
   const t = param.trim();
@@ -65,11 +95,14 @@ const EXPEDIENTE_DOCS: { type: string; label: string }[] = [
   { type: "cedula_representante", label: "Cédula o pasaporte del representante legal del acta" },
 ];
 
-type TabId = "general" | "docs" | "kyc";
+type TabId = "general" | "docs" | "kyc" | "invoices" | "quotations";
 
 export function ClientDetailPage() {
   const { id } = useParams();
   const nav = useNavigate();
+  const { user } = useAuth();
+  const staff = user?.role === "admin" || user?.role === "analyst";
+  const canUploadInvoice = user?.role === "client" || staff;
   const isNew = !id || id === "nuevo";
   const [tab, setTab] = useState<TabId>("general");
   const [err, setErr] = useState<string | null>(null);
@@ -78,6 +111,36 @@ export function ClientDetailPage() {
   const [docs, setDocs] = useState<Doc[]>([]);
   const [timeline, setTimeline] = useState<TimelineEv[]>([]);
   const [kycBoId, setKycBoId] = useState<number | null>(null);
+
+  const [invRows, setInvRows] = useState<ClientInvRow[]>([]);
+  const [invQ, setInvQ] = useState("");
+  const [invSt, setInvSt] = useState<string | "">("");
+  const [invFile, setInvFile] = useState<File | null>(null);
+  const [invEdit, setInvEdit] = useState<ClientInvRow | null>(null);
+  const [invEditForm, setInvEditForm] = useState({
+    invoice_number: "",
+    issuer: "",
+    payer_id: "",
+    amount: "",
+    due_date: "",
+    status: "",
+  });
+  const [payerCatalog, setPayerCatalog] = useState<PayerCatalogRow[]>([]);
+  const [invoicePayerOpts, setInvoicePayerOpts] = useState<PayerCatalogRow[]>([]);
+  const [uploadPayerId, setUploadPayerId] = useState("");
+
+  const [qRows, setQRows] = useState<ClientQuotRow[]>([]);
+  const [qInvOptions, setQInvOptions] = useState<ClientInvRow[]>([]);
+  const [qInvId, setQInvId] = useState("");
+  const [qAmountBase, setQAmountBase] = useState("");
+  const [qOpCost, setQOpCost] = useState("0");
+  const [qCommRate, setQCommRate] = useState("0.02");
+  const [qEdit, setQEdit] = useState<ClientQuotRow | null>(null);
+  const [qEditForm, setQEditForm] = useState({
+    amount_base: "",
+    commission: "",
+    operational_cost: "",
+  });
 
   const [legal_name, setLegalName] = useState("");
   const [trade_name, setTradeName] = useState("");
@@ -122,6 +185,23 @@ export function ClientDetailPage() {
     }
   }, []);
 
+  const loadClientInvoices = useCallback(async () => {
+    if (!co) return;
+    const p = new URLSearchParams();
+    p.set("client_id", String(co.id));
+    const qTrim = invQ.trim();
+    if (qTrim) p.set("q", qTrim);
+    if (invSt) p.set("status", invSt);
+    const data = await api<ClientInvRow[]>(`/invoices?${p.toString()}`);
+    setInvRows(data);
+  }, [co, invQ, invSt]);
+
+  const loadClientQuotations = useCallback(async () => {
+    if (!co) return;
+    const data = await api<ClientQuotRow[]>(`/quotations?client_id=${co.id}`);
+    setQRows(data);
+  }, [co]);
+
   useEffect(() => {
     if (isNew || !id) {
       setCo(null);
@@ -146,6 +226,217 @@ export function ClientDetailPage() {
       setErr(e instanceof Error ? e.message : "Error")
     );
   }, [id, isNew, loadClient, loadDocs, loadTimeline]);
+
+  useEffect(() => {
+    if (!co || isNew || tab !== "invoices") return;
+    loadClientInvoices().catch((e) => setErr(e instanceof Error ? e.message : "Error"));
+  }, [co?.id, tab, invSt, isNew, loadClientInvoices]);
+
+  useEffect(() => {
+    if (!co || isNew || tab !== "quotations") return;
+    loadClientQuotations().catch((e) => setErr(e instanceof Error ? e.message : "Error"));
+  }, [co?.id, tab, isNew, loadClientQuotations]);
+
+  useEffect(() => {
+    if (!co || isNew || tab !== "quotations" || !staff) return;
+    api<ClientInvRow[]>(`/invoices?client_id=${co.id}&limit=500`)
+      .then(setQInvOptions)
+      .catch(() => setQInvOptions([]));
+  }, [co?.id, tab, staff, isNew]);
+
+  useEffect(() => {
+    if (!staff || !co || isNew || tab !== "invoices") return;
+    api<PayerCatalogRow[]>("/payers")
+      .then(setPayerCatalog)
+      .catch(() => setPayerCatalog([]));
+  }, [staff, co?.id, tab, isNew]);
+
+  useEffect(() => {
+    if (!co || isNew || tab !== "invoices") return;
+    api<PayerCatalogRow[]>(`/invoices/payer-options?client_id=${co.id}`)
+      .then(setInvoicePayerOpts)
+      .catch(() => setInvoicePayerOpts([]));
+  }, [co?.id, tab, isNew]);
+
+  useEffect(() => {
+    if (!invEdit) return;
+    setInvEditForm({
+      invoice_number: invEdit.invoice_number,
+      issuer: invEdit.issuer,
+      payer_id: String(invEdit.payer_id),
+      amount: invEdit.amount,
+      due_date: invEdit.due_date ? invEdit.due_date.slice(0, 10) : "",
+      status: invEdit.status,
+    });
+  }, [invEdit]);
+
+  useEffect(() => {
+    if (!qEdit) return;
+    setQEditForm({
+      amount_base: qEdit.amount_base,
+      commission: qEdit.commission,
+      operational_cost: qEdit.operational_cost,
+    });
+  }, [qEdit]);
+
+  async function openInvoicePdf(invId: number) {
+    const tok = localStorage.getItem("finecta_token");
+    const headers: Record<string, string> = {};
+    if (tok) headers.Authorization = `Bearer ${tok}`;
+    const r = await fetch(`${base}/invoices/${invId}/pdf`, { headers });
+    if (!r.ok) {
+      setErr("No se pudo abrir el PDF");
+      return;
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
+    setTimeout(() => URL.revokeObjectURL(url), 120_000);
+  }
+
+  async function uploadClientInvoice() {
+    if (!co || !invFile) return;
+    setErr(null);
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", invFile);
+      const p = new URLSearchParams();
+      if (staff) p.set("client_id", String(co.id));
+      if (staff && uploadPayerId) p.set("payer_id", uploadPayerId);
+      const qs = p.toString();
+      await api<ClientInvRow>(`/invoices${qs ? `?${qs}` : ""}`, { method: "POST", formData: fd });
+      setInvFile(null);
+      await loadClientInvoices();
+      await loadTimeline(co.id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteClientInvoice(invId: number) {
+    if (!co || !window.confirm("¿Eliminar esta factura? Esta acción no se puede deshacer.")) return;
+    setErr(null);
+    try {
+      await api(`/invoices/${invId}`, { method: "DELETE" });
+      await loadClientInvoices();
+      await loadTimeline(co.id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error");
+    }
+  }
+
+  async function saveInvoicePatch() {
+    if (!co || !invEdit) return;
+    setErr(null);
+    try {
+      const pid = parseInt(invEditForm.payer_id, 10);
+      if (!Number.isFinite(pid) || pid <= 0) {
+        setErr("Seleccione un pagador válido.");
+        return;
+      }
+      await api<ClientInvRow>(`/invoices/${invEdit.id}`, {
+        method: "PATCH",
+        json: {
+          invoice_number: invEditForm.invoice_number.trim(),
+          issuer: invEditForm.issuer.trim(),
+          payer_id: pid,
+          amount: invEditForm.amount,
+          due_date: invEditForm.due_date.trim() ? invEditForm.due_date.trim() : null,
+          status: invEditForm.status || undefined,
+        },
+      });
+      setInvEdit(null);
+      await loadClientInvoices();
+      await loadTimeline(co.id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error");
+    }
+  }
+
+  async function createClientQuotation() {
+    if (!co || !staff) return;
+    const iid = Number(qInvId);
+    const baseN = parseFloat(String(qAmountBase).replace(",", "."));
+    const opN = parseFloat(String(qOpCost).replace(",", ".")) || 0;
+    const rateN = parseFloat(String(qCommRate).replace(",", "."));
+    if (!iid || Number.isNaN(baseN) || baseN <= 0) {
+      setErr("Seleccione factura e importe base válidos.");
+      return;
+    }
+    setErr(null);
+    setBusy(true);
+    try {
+      await api<ClientQuotRow>("/quotations", {
+        method: "POST",
+        json: {
+          invoice_id: iid,
+          amount_base: baseN,
+          commission_rate: Number.isNaN(rateN) ? 0.02 : rateN,
+          operational_cost: opN,
+        },
+      });
+      setQAmountBase("");
+      setQInvId("");
+      await loadClientQuotations();
+      await loadClientInvoices();
+      await loadTimeline(co.id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveQuotationPatch() {
+    if (!co || !qEdit) return;
+    setErr(null);
+    try {
+      await api<ClientQuotRow>(`/quotations/${qEdit.id}`, {
+        method: "PATCH",
+        json: {
+          amount_base: parseFloat(qEditForm.amount_base.replace(",", ".")),
+          commission: parseFloat(qEditForm.commission.replace(",", ".")),
+          operational_cost: parseFloat(qEditForm.operational_cost.replace(",", ".")),
+        },
+      });
+      setQEdit(null);
+      await loadClientQuotations();
+      await loadTimeline(co.id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error");
+    }
+  }
+
+  async function cancelClientQuotation(qid: number) {
+    if (!window.confirm("¿Anular esta cotización pendiente?")) return;
+    setErr(null);
+    try {
+      await api(`/quotations/${qid}`, { method: "PATCH", json: { status: "expired" } });
+      await loadClientQuotations();
+      if (co) {
+        await loadClientInvoices();
+        await loadTimeline(co.id);
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error");
+    }
+  }
+
+  async function respondClientQuotation(qid: number, accept: boolean) {
+    if (!co) return;
+    setErr(null);
+    try {
+      await api(`/quotations/${qid}/respond`, { method: "POST", json: { accept, comment: "" } });
+      await loadClientQuotations();
+      await loadClientInvoices();
+      await loadTimeline(co.id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error");
+    }
+  }
 
   async function saveGeneral() {
     setErr(null);
@@ -327,6 +618,8 @@ export function ClientDetailPage() {
         {tabBtn("general", "Datos generales")}
         {tabBtn("docs", "Documentación")}
         {tabBtn("kyc", "KYC")}
+        {co && !isNew && tabBtn("invoices", "Facturas")}
+        {co && !isNew && tabBtn("quotations", "Cotizaciones")}
       </div>
 
       {tab === "general" && (
@@ -650,6 +943,356 @@ export function ClientDetailPage() {
           ) : (
             <p className="text-sm text-zinc-500">Registre al menos un beneficiario final en Documentación para gestionar KYC.</p>
           )}
+        </div>
+      )}
+
+      {tab === "invoices" && co && (
+        <div className="mt-4 space-y-4 w-full min-w-0">
+          <div className="f-panel w-full min-w-0 space-y-3">
+            <p className="text-sm text-zinc-600">
+              Facturas de <strong>{co.legal_name}</strong>. Para el listado global con todos los filtros use el menú{" "}
+              <Link className="text-orange-700 hover:underline font-medium" to={staff ? `/app/facturas?client_id=${co.id}` : "/app/facturas"}>
+                Facturas
+              </Link>
+              .
+            </p>
+            {canUploadInvoice && (
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 space-y-2">
+                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Cargar factura (PDF)</p>
+                {staff && (
+                  <div>
+                    <label className="text-xs text-zinc-500">Pagador (opcional)</label>
+                    <select
+                      className="f-input mt-1 w-full text-sm"
+                      value={uploadPayerId}
+                      onChange={(e) => setUploadPayerId(e.target.value)}
+                    >
+                      <option value="">— Inferir del PDF —</option>
+                      {payerCatalog.map((py) => (
+                        <option key={py.id} value={String(py.id)}>
+                          {py.legal_name} · {py.tax_id}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <FilePicker
+                  accept="application/pdf"
+                  value={invFile}
+                  onFileChange={setInvFile}
+                  buttonLabel="Elegir PDF"
+                  kindHint="Un solo archivo"
+                  name="client_inv_pdf"
+                />
+                <button
+                  type="button"
+                  className="f-btn-primary text-xs"
+                  disabled={busy || !invFile}
+                  onClick={() => void uploadClientInvoice()}
+                >
+                  Subir y extraer datos
+                </button>
+              </div>
+            )}
+            <div className="flex flex-col sm:flex-row flex-wrap gap-2 items-end">
+              <input
+                className="f-input min-w-0 flex-1 basis-[min(100%,18rem)]"
+                placeholder="Buscar número, emisor, pagador…"
+                value={invQ}
+                onChange={(e) => setInvQ(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && void loadClientInvoices()}
+              />
+              <select className="f-input w-full sm:w-44" value={invSt} onChange={(e) => setInvSt(e.target.value)}>
+                <option value="">Todos los estados</option>
+                <option value="draft">Borrador</option>
+                <option value="uploaded">Cargada</option>
+                <option value="in_quotation">En cotización</option>
+                <option value="in_operation">En operación</option>
+                <option value="in_collection">En cobro</option>
+                <option value="paid">Pagada</option>
+                <option value="closed">Cerrada</option>
+                <option value="rejected">Rechazada</option>
+              </select>
+              <button type="button" className="f-btn-ghost text-xs" onClick={() => void loadClientInvoices()}>
+                Filtrar
+              </button>
+            </div>
+            <div className="f-data-shell -mx-1 sm:mx-0 rounded-lg overflow-x-auto">
+              <table className="w-full min-w-[720px] text-sm text-left">
+                <thead>
+                  <tr className="text-left text-xs text-zinc-500 border-b border-zinc-200">
+                    <th className="py-2 pr-2">Número</th>
+                    <th className="py-2 pr-2">Emisor / Pagador</th>
+                    <th className="py-2 pr-2">Monto</th>
+                    <th className="py-2 pr-2">Vence</th>
+                    <th className="py-2 pr-2">Estado</th>
+                    <th className="py-2 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {invRows.map((r) => (
+                    <tr key={r.id} className="hover:bg-zinc-50/80">
+                      <td className="py-2.5 pr-2 font-mono text-xs">{r.invoice_number}</td>
+                      <td className="py-2.5 pr-2 text-zinc-700">
+                        <div className="line-clamp-1">{r.issuer}</div>
+                        <div className="text-xs text-zinc-500 line-clamp-1">{r.payer?.legal_name ?? "—"}</div>
+                        {r.payer?.tax_id ? (
+                          <div className="text-[10px] font-mono text-zinc-400">RNC: {r.payer.tax_id}</div>
+                        ) : null}
+                      </td>
+                      <td className="py-2.5 pr-2 tabular-nums">{money(r.amount)}</td>
+                      <td className="py-2.5 pr-2 text-xs text-zinc-500">{fmtDate(r.due_date)}</td>
+                      <td className="py-2.5 pr-2">
+                        <StatusBadge status={r.status} />
+                      </td>
+                      <td className="py-2.5 text-right whitespace-nowrap">
+                        {r.pdf_path ? (
+                          <button type="button" className="f-btn-ghost text-xs mr-1" onClick={() => void openInvoicePdf(r.id)}>
+                            PDF
+                          </button>
+                        ) : null}
+                        <button type="button" className="f-btn-ghost text-xs mr-1" onClick={() => setInvEdit(r)}>
+                          Editar
+                        </button>
+                        <button type="button" className="f-btn-ghost text-xs text-red-700" onClick={() => void deleteClientInvoice(r.id)}>
+                          Eliminar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {invRows.length === 0 && <p className="text-sm text-zinc-500 py-4 px-1">Sin facturas para este cliente.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "quotations" && co && (
+        <div className="mt-4 space-y-4 w-full min-w-0">
+          <div className="f-panel w-full min-w-0 space-y-3">
+            <p className="text-sm text-zinc-600">
+              Cotizaciones de <strong>{co.legal_name}</strong>. Vista global en el menú{" "}
+              <Link className="text-orange-700 hover:underline font-medium" to={staff ? `/app/cotizaciones?client_id=${co.id}` : "/app/cotizaciones"}>
+                Cotizaciones
+              </Link>
+              .
+            </p>
+            {staff && (
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 space-y-2">
+                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Nueva cotización</p>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="sm:col-span-2">
+                    <label className="text-xs text-zinc-500">Factura</label>
+                    <select className="f-input mt-1 w-full text-sm" value={qInvId} onChange={(e) => setQInvId(e.target.value)}>
+                      <option value="">— Seleccione —</option>
+                      {qInvOptions.map((inv) => (
+                        <option key={inv.id} value={String(inv.id)}>
+                          #{inv.id} · {inv.invoice_number} · {money(inv.amount)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-500">Importe base</label>
+                    <input className="f-input mt-1 w-full text-sm" value={qAmountBase} onChange={(e) => setQAmountBase(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-500">Tasa comisión (0–1)</label>
+                    <input className="f-input mt-1 w-full text-sm" value={qCommRate} onChange={(e) => setQCommRate(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-500">Coste operativo</label>
+                    <input className="f-input mt-1 w-full text-sm" value={qOpCost} onChange={(e) => setQOpCost(e.target.value)} />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="f-btn-primary text-xs"
+                  disabled={busy || !qInvId}
+                  onClick={() => void createClientQuotation()}
+                >
+                  Crear cotización
+                </button>
+              </div>
+            )}
+            <div className="f-data-shell -mx-1 sm:mx-0 rounded-lg overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-zinc-500 border-b">
+                    <th className="py-2 pr-2">#</th>
+                    <th className="py-2 pr-2">Fact.</th>
+                    <th className="py-2 pr-2">Base</th>
+                    <th className="py-2 pr-2">Comisión</th>
+                    <th className="py-2 pr-2">Coste op.</th>
+                    <th className="py-2 pr-2">Estado</th>
+                    <th className="py-2" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {qRows.map((q) => (
+                    <tr key={q.id}>
+                      <td className="py-2.5 font-mono text-xs">#{q.id}</td>
+                      <td className="py-2.5 font-mono text-xs text-zinc-600">{q.invoice_id ?? "—"}</td>
+                      <td className="py-2.5 tabular-nums">{money(q.amount_base)}</td>
+                      <td className="py-2.5 text-xs text-zinc-600">{money(q.commission)}</td>
+                      <td className="py-2.5 text-xs text-zinc-600">{money(q.operational_cost)}</td>
+                      <td className="py-2.5">
+                        <StatusBadge status={q.status} />
+                      </td>
+                      <td className="py-2.5 text-right whitespace-nowrap">
+                        {staff && q.status === "pending" && (
+                          <>
+                            <button type="button" className="f-btn-ghost text-xs mr-1" onClick={() => setQEdit(q)}>
+                              Editar
+                            </button>
+                            <button type="button" className="f-btn-ghost text-xs text-red-700" onClick={() => void cancelClientQuotation(q.id)}>
+                              Anular
+                            </button>
+                          </>
+                        )}
+                        {user?.role === "client" && q.status === "pending" && (
+                          <span className="inline-flex gap-1">
+                            <button type="button" className="f-btn-ghost text-xs" onClick={() => void respondClientQuotation(q.id, true)}>
+                              Aceptar
+                            </button>
+                            <button type="button" className="f-btn-ghost text-xs" onClick={() => void respondClientQuotation(q.id, false)}>
+                              Rechazar
+                            </button>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {qRows.length === 0 && <p className="text-sm text-zinc-500 py-4">Sin cotizaciones para este cliente.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {invEdit && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="presentation"
+          onClick={() => setInvEdit(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-lg w-full p-4 space-y-3 max-h-[90vh] overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-semibold text-zinc-900">Editar factura #{invEdit.id}</h2>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="text-xs text-zinc-500">Número</label>
+                <input className="f-input mt-1 w-full text-sm" value={invEditForm.invoice_number} onChange={(e) => setInvEditForm((f) => ({ ...f, invoice_number: e.target.value }))} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs text-zinc-500">Emisor</label>
+                <input className="f-input mt-1 w-full text-sm" value={invEditForm.issuer} onChange={(e) => setInvEditForm((f) => ({ ...f, issuer: e.target.value }))} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs text-zinc-500">Pagador (catálogo)</label>
+                <select
+                  className="f-input mt-1 w-full text-sm"
+                  value={invEditForm.payer_id}
+                  onChange={(e) => setInvEditForm((f) => ({ ...f, payer_id: e.target.value }))}
+                >
+                  {(() => {
+                    const base = staff && payerCatalog.length > 0 ? payerCatalog : invoicePayerOpts;
+                    const seen = new Set(base.map((p) => p.id));
+                    const extra =
+                      invEdit?.payer && !seen.has(invEdit.payer_id)
+                        ? [
+                            {
+                              id: invEdit.payer.id,
+                              legal_name: invEdit.payer.legal_name,
+                              tax_id: invEdit.payer.tax_id,
+                            },
+                          ]
+                        : [];
+                    return [...base, ...extra];
+                  })().map((py) => (
+                    <option key={py.id} value={String(py.id)}>
+                      {py.legal_name} · {py.tax_id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500">Monto</label>
+                <input className="f-input mt-1 w-full text-sm tabular-nums" value={invEditForm.amount} onChange={(e) => setInvEditForm((f) => ({ ...f, amount: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500">Vence (AAAA-MM-DD)</label>
+                <input className="f-input mt-1 w-full text-sm font-mono" value={invEditForm.due_date} onChange={(e) => setInvEditForm((f) => ({ ...f, due_date: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500">Estado</label>
+                <select className="f-input mt-1 w-full text-sm" value={invEditForm.status} onChange={(e) => setInvEditForm((f) => ({ ...f, status: e.target.value }))}>
+                  <option value="draft">Borrador</option>
+                  <option value="uploaded">Cargada</option>
+                  <option value="in_quotation">En cotización</option>
+                  <option value="in_operation">En operación</option>
+                  <option value="in_collection">En cobro</option>
+                  <option value="paid">Pagada</option>
+                  <option value="closed">Cerrada</option>
+                  <option value="rejected">Rechazada</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 justify-end pt-2">
+              <button type="button" className="f-btn-ghost text-xs" onClick={() => setInvEdit(null)}>
+                Cerrar
+              </button>
+              <button type="button" className="f-btn-primary text-xs" onClick={() => void saveInvoicePatch()}>
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {qEdit && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="presentation"
+          onClick={() => setQEdit(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-md w-full p-4 space-y-3"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-semibold text-zinc-900">Editar cotización #{qEdit.id}</h2>
+            <p className="text-xs text-zinc-500">Solo cotizaciones pendientes admiten cambio de importes.</p>
+            <div className="space-y-2">
+              <div>
+                <label className="text-xs text-zinc-500">Importe base</label>
+                <input className="f-input mt-1 w-full text-sm" value={qEditForm.amount_base} onChange={(e) => setQEditForm((f) => ({ ...f, amount_base: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500">Comisión</label>
+                <input className="f-input mt-1 w-full text-sm" value={qEditForm.commission} onChange={(e) => setQEditForm((f) => ({ ...f, commission: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500">Coste operativo</label>
+                <input className="f-input mt-1 w-full text-sm" value={qEditForm.operational_cost} onChange={(e) => setQEditForm((f) => ({ ...f, operational_cost: e.target.value }))} />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 justify-end pt-2">
+              <button type="button" className="f-btn-ghost text-xs" onClick={() => setQEdit(null)}>
+                Cerrar
+              </button>
+              <button type="button" className="f-btn-primary text-xs" onClick={() => void saveQuotationPatch()}>
+                Guardar importes
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

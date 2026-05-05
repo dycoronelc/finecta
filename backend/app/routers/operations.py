@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.deps import get_current_user, is_finecta_user, require_roles
 from app.db import models
@@ -103,6 +103,7 @@ def op_invoices(
             OperationInvoice, OperationInvoice.invoice_id == Invoice.id
         )
         .where(OperationInvoice.operation_id == op_id)
+        .options(selectinload(Invoice.payer))
     )
     return list(db.scalars(q))
 
@@ -157,7 +158,13 @@ def create_op(
         oi_rows.append((inv.id, am))
         inv_refs.append(inv)
     payers = sorted(
-        {i.payer.strip() for i in inv_refs if i.payer and i.payer.strip() and i.payer != "—"}
+        {
+            i.payer.legal_name.strip()
+            for i in inv_refs
+            if i.payer
+            and i.payer.legal_name.strip()
+            and i.payer.legal_name.strip() != "—"
+        }
     )
     if len(payers) > 1 and not body.allow_multiple_payers:
         raise HTTPException(
@@ -189,9 +196,9 @@ def create_op(
         )
     payer_tax_ids = sorted(
         {
-            (i.payer_tax_id or "").strip()
+            (i.payer.tax_id or "").strip()
             for i in inv_refs
-            if i.payer_tax_id and (i.payer_tax_id or "").strip()
+            if i.payer and (i.payer.tax_id or "").strip()
         }
     )
     _add_event(
