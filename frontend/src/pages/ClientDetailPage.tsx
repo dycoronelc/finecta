@@ -325,6 +325,31 @@ export function ClientDetailPage() {
             </button>
           </div>
 
+          <div className="grid gap-4 w-full min-w-0 lg:grid-cols-2">
+            <div className="f-panel w-full min-w-0">
+              <h2 className="text-base font-semibold text-zinc-900">Documentos obligatorios del expediente</h2>
+              <p className="text-xs text-zinc-500 mt-1 mb-3">
+                Esta lista resume los archivos mínimos que debe cargar el cliente para revisión.
+              </p>
+              <ul className="space-y-2 text-sm text-zinc-700">
+                <li className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">Certificado de Registro Mercantil</li>
+                <li className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">RNC</li>
+                <li className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">Acta de asamblea (representante legal y atribuciones)</li>
+                <li className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">Cédula o pasaporte del representante legal</li>
+              </ul>
+            </div>
+            <div className="f-panel w-full min-w-0">
+              <h2 className="text-base font-semibold text-zinc-900">Beneficiarios finales</h2>
+              <p className="text-sm text-zinc-700 mt-1 leading-relaxed">
+                Debe solicitarse por <strong>cada beneficiario final</strong> (pueden ser varios):
+              </p>
+              <ul className="mt-3 space-y-2 text-sm text-zinc-700">
+                <li className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2">Nombre completo</li>
+                <li className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2">Documento de identidad (cédula o pasaporte)</li>
+              </ul>
+            </div>
+          </div>
+
           {co && !isNew && (
             <div className="f-panel w-full min-w-0">
               <h2 className="text-base font-semibold text-zinc-900">Línea de tiempo</h2>
@@ -350,8 +375,8 @@ export function ClientDetailPage() {
       )}
 
       {tab === "docs" && co && (
-        <div className="f-panel mt-4 space-y-8 w-full min-w-0">
-          <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-4 space-y-3">
+        <div className="f-panel mt-4 space-y-8 w-full min-w-0 max-w-none">
+          <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-4 space-y-3 w-full min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-orange-900">KYC — obligatorio</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-200 text-orange-950">Beneficiarios finales</span>
@@ -389,7 +414,7 @@ export function ClientDetailPage() {
             </ul>
           </div>
 
-          <div className="border-t border-zinc-200 pt-6 space-y-4">
+          <div className="border-t border-zinc-200 pt-6 space-y-4 w-full min-w-0">
             <h3 className="text-sm font-semibold text-zinc-800">Expediente societario y legal</h3>
             <p className="text-xs text-zinc-500 leading-relaxed">
               Documentación de la empresa y del representante; conviene tenerla completa para el expediente, aunque el
@@ -418,7 +443,7 @@ export function ClientDetailPage() {
       )}
 
       {tab === "kyc" && co && (
-        <div className="f-panel mt-4 space-y-4 w-full min-w-0">
+        <div className="f-panel mt-4 space-y-4 w-full min-w-0 max-w-none">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-zinc-600">Estado actual:</span>
             <StatusBadge status={co.kyc_status} />
@@ -426,7 +451,7 @@ export function ClientDetailPage() {
           {co.kyc_notes && (
             <p className="text-sm text-amber-900 bg-amber-50 rounded-lg p-3 border border-amber-100">Nota: {co.kyc_notes}</p>
           )}
-          <div className="border border-zinc-200 rounded-xl p-4 bg-zinc-50/80 space-y-3">
+          <div className="border border-zinc-200 rounded-xl p-4 bg-zinc-50/80 space-y-3 w-full min-w-0">
             <h3 className="text-sm font-semibold text-zinc-800">Consulta en listas (proveedor externo)</h3>
             <p className="text-xs text-zinc-600 leading-relaxed">
               Las búsquedas se harán sobre los <strong>beneficiarios finales</strong> registrados en la pestaña
@@ -451,7 +476,7 @@ export function ClientDetailPage() {
               </details>
             )}
           </div>
-          <div className="border-t border-zinc-200 pt-4 space-y-3">
+          <div className="border-t border-zinc-200 pt-4 space-y-3 w-full min-w-0">
             <h3 className="text-sm font-semibold text-zinc-800">Revisión manual Finecta</h3>
             <div className="flex flex-wrap gap-2">
               {co.kyc_status !== "approved" && co.kyc_status !== "rejected" && (
