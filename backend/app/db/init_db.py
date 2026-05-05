@@ -10,7 +10,7 @@ from app.core.config import get_settings
 from app.core.security import get_password_hash
 from app.db import models
 from app.db.base import Base
-from app.db.models.models import KycStatus, UserRole
+from app.db.models.models import BeneficialOwner, ClientBeneficialOwner, KycStatus, UserRole
 from app.db.session import SessionLocal, engine
 
 settings = get_settings()
@@ -23,9 +23,6 @@ def ensure_uploads() -> None:
 def create_tables() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_invoice_payer_tax_id_column()
-    _ensure_company_client_columns()
-    _ensure_company_document_party_name()
-    _ensure_company_timeline_table()
 
 
 def _ensure_invoice_payer_tax_id_column() -> None:
@@ -43,127 +40,61 @@ def _ensure_invoice_payer_tax_id_column() -> None:
         conn.execute(text(ddl))
 
 
-def _ensure_company_client_columns() -> None:
-    insp = inspect(engine)
-    if "companies" not in insp.get_table_names():
-        return
-    cols = {c["name"] for c in insp.get_columns("companies")}
-    sqlite = settings.database_url.startswith("sqlite")
-    with engine.begin() as conn:
-        if "contact_full_name" not in cols:
-            if sqlite:
-                conn.execute(text("ALTER TABLE companies ADD COLUMN contact_full_name VARCHAR(255)"))
-                conn.execute(text("UPDATE companies SET contact_full_name = '' WHERE contact_full_name IS NULL"))
-            else:
-                conn.execute(
-                    text(
-                        "ALTER TABLE companies ADD COLUMN contact_full_name VARCHAR(255) NOT NULL DEFAULT ''"
-                    )
-                )
-        if "kyc_screening" not in cols:
-            ddl = (
-                "ALTER TABLE companies ADD COLUMN kyc_screening TEXT"
-                if sqlite
-                else "ALTER TABLE companies ADD COLUMN kyc_screening JSON NULL"
-            )
-            conn.execute(text(ddl))
-
-
-def _ensure_company_timeline_table() -> None:
-    insp = inspect(engine)
-    if "company_timeline_events" in insp.get_table_names():
-        return
-    sqlite = settings.database_url.startswith("sqlite")
-    with engine.begin() as conn:
-        if sqlite:
-            conn.execute(
-                text(
-                    """
-                    CREATE TABLE company_timeline_events (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        company_id INTEGER NOT NULL,
-                        event_type VARCHAR(64) NOT NULL,
-                        message VARCHAR(1024) NOT NULL,
-                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE
-                    )
-                    """
-                )
-            )
-            conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS ix_company_timeline_company_id ON company_timeline_events(company_id)"
-                )
-            )
-        else:
-            conn.execute(
-                text(
-                    """
-                    CREATE TABLE company_timeline_events (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        company_id INT NOT NULL,
-                        event_type VARCHAR(64) NOT NULL,
-                        message VARCHAR(1024) NOT NULL,
-                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        INDEX ix_company_timeline_company_id (company_id),
-                        CONSTRAINT fk_company_timeline_company_id FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """
-                )
-            )
-
-
-def _ensure_company_document_party_name() -> None:
-    insp = inspect(engine)
-    if "company_documents" not in insp.get_table_names():
-        return
-    cols = {c["name"] for c in insp.get_columns("company_documents")}
-    if "party_name" in cols:
-        return
-    ddl = "ALTER TABLE company_documents ADD COLUMN party_name VARCHAR(255) NULL"
-    with engine.begin() as conn:
-        conn.execute(text(ddl))
-
-
 def seed_if_empty() -> None:
     db: Session = SessionLocal()
     try:
         n = db.execute(select(models.User.id).limit(1)).scalar()
         if n is not None:
             return
-        c_demo = models.Company(
+        c_demo = models.Client(
             legal_name="Comercial Demo SRL",
             trade_name="Demo",
             tax_id="123456789",
             contact_email="empresa@demo.com",
             phone="809-555-0000",
             contact_full_name="María Pérez de León",
-            kyc_status=KycStatus.approved.value,
-            approved_at=datetime.now(timezone.utc),
         )
-        c_pending = models.Company(
+        c_pending = models.Client(
             legal_name="Importadora BETA SRL",
             tax_id="987654321",
             contact_email="beta@demo.com",
             phone="809-555-0100",
             contact_full_name="Juan B. Gómez",
-            kyc_status=KycStatus.in_review.value,
         )
         db.add_all([c_demo, c_pending])
         db.flush()
-        from app.services.company_timeline import add_company_timeline_event
+        from app.services.client_timeline import add_client_timeline_event
 
-        add_company_timeline_event(
+        add_client_timeline_event(
             db,
             c_demo.id,
             "created",
             "Cliente «Comercial Demo SRL» registrado en el sistema",
         )
-        add_company_timeline_event(
+        add_client_timeline_event(
             db,
             c_pending.id,
             "created",
             "Cliente «Importadora BETA SRL» registrado en el sistema",
+        )
+        bo_demo = BeneficialOwner(
+            full_name="María Pérez de León",
+            national_id="V-12345678",
+            kyc_status=KycStatus.approved.value,
+            approved_at=datetime.now(timezone.utc),
+        )
+        bo_pending = BeneficialOwner(
+            full_name="Carlos Beneficiario",
+            national_id="V-87654321",
+            kyc_status=KycStatus.in_review.value,
+        )
+        db.add_all([bo_demo, bo_pending])
+        db.flush()
+        db.add_all(
+            [
+                ClientBeneficialOwner(client_id=c_demo.id, beneficial_owner_id=bo_demo.id),
+                ClientBeneficialOwner(client_id=c_pending.id, beneficial_owner_id=bo_pending.id),
+            ]
         )
         u_admin = models.User(
             email="admin@finecta.com",
@@ -198,7 +129,7 @@ def seed_if_empty() -> None:
             hashed_password=get_password_hash("Cliente123!"),
             full_name="Carlos Cliente",
             role=UserRole.client.value,
-            company_id=c_demo.id,
+            client_id=c_demo.id,
         )
         db.add_all([u_admin, u_ana, u_fid, u_payer, u_client])
         db.commit()

@@ -20,18 +20,18 @@ export function ContractsPage() {
   const staff = user?.role === "admin" || user?.role === "analyst";
 
   useEffect(() => {
-    if (user?.company_id) setCid(String(user.company_id));
+    if (user?.client_id) setCid(String(user.client_id));
     api<C[]>("/contracts")
       .then(setRows)
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
-  }, [user?.company_id]);
+  }, [user?.client_id]);
 
   async function gen() {
     setErr(null);
     try {
-      const q = new URLSearchParams({ company_id: cid, contract_type: ct });
+      const q = new URLSearchParams({ client_id: cid, contract_type: ct });
       await api<C>(`/contracts/generate?${q.toString()}`, { method: "POST" });
-      const n = await api<C[]>("/contracts?company_id=" + cid);
+      const n = await api<C[]>("/contracts?client_id=" + cid);
       setRows(n);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error");
@@ -44,7 +44,7 @@ export function ContractsPage() {
       {staff && (
         <div className="f-panel flex flex-col sm:flex-row flex-wrap gap-3 sm:items-end w-full min-w-0">
           <div className="min-w-0">
-            <p className="text-xs text-zinc-500">Empresa ID</p>
+            <p className="text-xs text-zinc-500">Cliente ID</p>
             <input className="f-input w-full min-[400px]:w-28 text-xs" value={cid} onChange={(e) => setCid(e.target.value)} />
           </div>
           <div className="min-w-0 flex-1 sm:flex-initial sm:min-w-[14rem]">

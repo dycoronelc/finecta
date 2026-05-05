@@ -31,12 +31,12 @@ def list_payments(
     b = select(Payment)
     if operation_id:
         b = b.where(Payment.operation_id == operation_id)
-    if not is_finecta_user(user) and user.company_id:
+    if not is_finecta_user(user) and user.client_id:
         subq = select(FactoringOperation.id).where(
-            FactoringOperation.company_id == user.company_id
+            FactoringOperation.client_id == user.client_id
         )
         b = b.where(Payment.operation_id.in_(subq))  # type: ignore[assignment]
-    if not is_finecta_user(user) and not user.company_id:
+    if not is_finecta_user(user) and not user.client_id:
         return []
     return list(db.scalars(b.order_by(Payment.id.desc())))
 

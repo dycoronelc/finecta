@@ -143,9 +143,9 @@ class MatchItem:
 
 
 def run_matching(
-    db: Session, company_id: int, rows: list[RowInfo]
+    db: Session, client_id: int, rows: list[RowInfo]
 ) -> dict[str, Any]:
-    q = select(Invoice).where(Invoice.company_id == company_id)
+    q = select(Invoice).where(Invoice.client_id == client_id)
     invoices = list(db.scalars(q).all())
     by_num: dict[str, list[Invoice]] = {}
     for inv in invoices:

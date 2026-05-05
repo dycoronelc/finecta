@@ -41,17 +41,17 @@ def _code() -> str:
 
 @router.get("", response_model=list[OperationOut])
 def list_ops(
-    company_id: int | None = None,
+    client_id: int | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ) -> list[OperationOut]:
     b = select(FactoringOperation)
     if not is_finecta_user(user):
-        if not user.company_id:
+        if not user.client_id:
             return []
-        b = b.where(FactoringOperation.company_id == user.company_id)
-    elif company_id:
-        b = b.where(FactoringOperation.company_id == company_id)
+        b = b.where(FactoringOperation.client_id == user.client_id)
+    elif client_id:
+        b = b.where(FactoringOperation.client_id == client_id)
     rows = list(db.scalars(b.order_by(FactoringOperation.id.desc())))
     out: list[OperationOut] = []
     for o in rows:
@@ -73,7 +73,7 @@ def get_op(
     o = db.get(FactoringOperation, op_id)
     if not o:
         raise HTTPException(404, "Operación no encontrada")
-    if not is_finecta_user(user) and user.company_id != o.company_id:
+    if not is_finecta_user(user) and user.client_id != o.client_id:
         raise HTTPException(403, "Acceso denegado")
     cnt = db.execute(
         select(func.count()).select_from(OperationInvoice).where(
@@ -95,7 +95,7 @@ def op_invoices(
     o = db.get(FactoringOperation, op_id)
     if not o:
         raise HTTPException(404, "Operación no encontrada")
-    if not is_finecta_user(user) and user.company_id != o.company_id:
+    if not is_finecta_user(user) and user.client_id != o.client_id:
         raise HTTPException(403, "Acceso denegado")
     q = (
         select(Invoice)
@@ -114,7 +114,7 @@ def timeline(
     o = db.get(FactoringOperation, op_id)
     if not o:
         raise HTTPException(404, "Operación no encontrada")
-    if not is_finecta_user(user) and user.company_id != o.company_id:
+    if not is_finecta_user(user) and user.client_id != o.client_id:
         raise HTTPException(403, "Acceso denegado")
     return list(
         db.scalars(
@@ -150,7 +150,7 @@ def create_op(
     inv_refs: list[Invoice] = []
     for it in body.items:
         inv = db.get(Invoice, it.invoice_id)
-        if not inv or inv.company_id != body.company_id:
+        if not inv or inv.client_id != body.client_id:
             raise HTTPException(400, f"Factura {it.invoice_id} inválida")
         am = it.amount_assigned or inv.amount
         total += am
@@ -167,7 +167,7 @@ def create_op(
     code = _code()
     op = FactoringOperation(
         code=code,
-        company_id=body.company_id,
+        client_id=body.client_id,
         status=OperationStatus.active.value,
         total_invoiced=total,
         quotation_id=body.quotation_id,

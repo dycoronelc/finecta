@@ -18,9 +18,9 @@ from app.core.deps import is_finecta_user
 from app.db import models
 from app.db.models.models import UserRole
 from app.schemas.analytics import (
+    ClientVolumeOut,
     ClusterOut,
     ClusterPointOut,
-    CompanyVolumeOut,
     IssuerBarOut,
     MonthlyPointOut,
     PortfolioAnalyticsOut,
@@ -94,30 +94,30 @@ def build_portfolio_analytics(
     q = select(models.Invoice)
     if is_finecta_user(user) or user.role == UserRole.fiduciary.value:
         scope = "platform"
-        company_id = None
+        client_id = None
     else:
-        if not user.company_id:
+        if not user.client_id:
             return PortfolioAnalyticsOut(
                 has_data=False,
-                scope="company",
-                company_id=None,
+                scope="client",
+                client_id=None,
             )
-        q = q.where(models.Invoice.company_id == user.company_id)
-        scope = "company"
-        company_id = user.company_id
+        q = q.where(models.Invoice.client_id == user.client_id)
+        scope = "client"
+        client_id = user.client_id
 
     invoices = list(db.execute(q).scalars().all())
     if not invoices:
         return PortfolioAnalyticsOut(
             has_data=False,
             scope=scope,
-            company_id=company_id,
+            client_id=client_id,
         )
 
     amounts: list[Decimal] = [inv.amount for inv in invoices]
     total_m = sum(amounts, Decimal(0))
     n_inv = len(invoices)
-    by_company: dict[int, list] = defaultdict(lambda: [0, Decimal(0)])
+    by_client: dict[int, list] = defaultdict(lambda: [0, Decimal(0)])
     by_issuer: dict[str, list] = defaultdict(
         lambda: {
             "amounts": [],
@@ -127,9 +127,9 @@ def build_portfolio_analytics(
     by_month: dict[str, list[Decimal]] = defaultdict(list)
 
     for inv in invoices:
-        cid = inv.company_id
-        by_company[cid][0] += 1
-        by_company[cid][1] += inv.amount
+        cid = inv.client_id
+        by_client[cid][0] += 1
+        by_client[cid][1] += inv.amount
         by_issuer[inv.issuer]["amounts"].append(float(inv.amount))
         d = _inv_effective_date(inv)
         if d:
@@ -139,18 +139,18 @@ def build_portfolio_analytics(
             key = f"{ref.year:04d}-{ref.month:02d}"
             by_month[key].append(inv.amount)
 
-    company_names: dict[int, str] = {}
-    for cid in by_company:
-        c = db.get(models.Company, cid)
-        company_names[cid] = c.legal_name if c else f"ID {cid}"
+    client_names: dict[int, str] = {}
+    for cid in by_client:
+        c = db.get(models.Client, cid)
+        client_names[cid] = c.legal_name if c else f"ID {cid}"
 
-    vol_c: list[CompanyVolumeOut] = []
-    for cid, (cnt, am) in by_company.items():
+    vol_c: list[ClientVolumeOut] = []
+    for cid, (cnt, am) in by_client.items():
         pct = float((am / total_m * 100) if total_m > 0 else 0)
         vol_c.append(
-            CompanyVolumeOut(
-                company_id=cid,
-                legal_name=company_names.get(cid, str(cid))[:200],
+            ClientVolumeOut(
+                client_id=cid,
+                legal_name=client_names.get(cid, str(cid))[:200],
                 invoice_count=cnt,
                 total_amount=str(round(am, 2)),
                 share_percent=round(pct, 1),
@@ -309,9 +309,9 @@ def build_portfolio_analytics(
     return PortfolioAnalyticsOut(
         has_data=True,
         scope=scope,
-        company_id=company_id,
+        client_id=client_id,
         summary=summary,
-        volume_by_company=vol_c,
+        volume_by_client=vol_c,
         monthly_trend=monthly,
         top_issuers=top_issuers[:10],
         rfm_issuers=rfm_issuers[:25],

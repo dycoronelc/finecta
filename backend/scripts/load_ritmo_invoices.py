@@ -28,7 +28,9 @@ from sqlalchemy.orm import Session
 from app.db.init_db import create_tables, ensure_uploads
 from app.core.security import get_password_hash
 from app.db.models.models import (
-    Company,
+    BeneficialOwner,
+    Client,
+    ClientBeneficialOwner,
     Invoice,
     InvoiceStatus,
     KycStatus,
@@ -68,24 +70,31 @@ def run() -> None:
     db: Session = SessionLocal()
     try:
         co = db.execute(
-            select(Company).where(Company.tax_id == RITMO_TAX_ID)
+            select(Client).where(Client.tax_id == RITMO_TAX_ID)
         ).scalar_one_or_none()
         if not co:
-            co = Company(
+            co = Client(
                 legal_name=RITMO_NAME,
                 trade_name=RITMO_NAME,
                 tax_id=RITMO_TAX_ID,
                 contact_email="contacto@ritmo.com",
                 phone="",
                 contact_full_name="Contacto Ritmo",
-                kyc_status=KycStatus.approved.value,
-                approved_at=datetime.now(timezone.utc),
             )
             db.add(co)
             db.flush()
-            print(f"Empresa creada: {co.legal_name} (id={co.id})")
+            bo = BeneficialOwner(
+                full_name="Contacto Ritmo",
+                national_id=None,
+                kyc_status=KycStatus.approved.value,
+                approved_at=datetime.now(timezone.utc),
+            )
+            db.add(bo)
+            db.flush()
+            db.add(ClientBeneficialOwner(client_id=co.id, beneficial_owner_id=bo.id))
+            print(f"Cliente creado: {co.legal_name} (id={co.id})")
         else:
-            print(f"Usando empresa existente: {co.legal_name} (id={co.id})")
+            print(f"Usando cliente existente: {co.legal_name} (id={co.id})")
 
         u_rit = db.execute(
             select(User).where(User.email == "cliente@ritmo.com")
@@ -97,19 +106,19 @@ def run() -> None:
                 full_name="Usuario Ritmo",
                 role=UserRole.client.value,
                 is_active=True,
-                company_id=co.id,
+                client_id=co.id,
             )
             db.add(u_rit)
             db.commit()
             print("Usuario creada: cliente@ritmo.com / Ritmo2026! (cambie en producción).")
         else:
-            u_rit.company_id = co.id
+            u_rit.client_id = co.id
             db.commit()
-            print("Usuario existente: cliente@ritmo.com (empresa vinculada a Ritmo).")
+            print("Usuario existente: cliente@ritmo.com (cliente vinculado a Ritmo).")
 
         ex = (
             db.execute(
-                select(Invoice.invoice_number).where(Invoice.company_id == co.id)
+                select(Invoice.invoice_number).where(Invoice.client_id == co.id)
             ).scalars().all()
         )
         have = {str(n) for n in ex if n}
@@ -130,7 +139,7 @@ def run() -> None:
                 "fecha_emision": r.fecha.isoformat() if r.fecha else None,
             }
             inv = Invoice(
-                company_id=co.id,
+                client_id=co.id,
                 invoice_number=r.n_factura[:120],
                 issuer=r.proveedor[:500],
                 payer=PAYER_NAME[:500],

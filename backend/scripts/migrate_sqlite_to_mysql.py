@@ -26,9 +26,13 @@ from app.db.base import Base
 from app.db.models import models  # noqa: F401  # Importa modelos para registrar metadata
 
 TABLE_ORDER = [
-    "companies",
+    "clients",
+    "beneficial_owners",
+    "client_beneficial_owners",
     "users",
-    "company_documents",
+    "client_documents",
+    "beneficial_owner_documents",
+    "client_timeline_events",
     "invoices",
     "quotations",
     "contracts",

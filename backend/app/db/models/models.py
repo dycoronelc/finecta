@@ -13,6 +13,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -112,19 +113,21 @@ class User(Base):
         Enum(UserRole, values_callable=_enum_values), default=UserRole.client.value
     )
     is_active: Mapped[bool] = mapped_column(default=True)
-    company_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("companies.id", ondelete="SET NULL"), nullable=True
+    client_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("clients.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    company: Mapped[Optional["Company"]] = relationship(
-        "Company", back_populates="users", foreign_keys=[company_id]
+    client: Mapped[Optional["Client"]] = relationship(
+        "Client", back_populates="users", foreign_keys=[client_id]
     )
 
 
-class Company(Base):
-    __tablename__ = "companies"
+class Client(Base):
+    """Cliente (persona jurídica). Sin KYC a nivel fila: el KYC es por beneficiario final."""
+
+    __tablename__ = "clients"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     legal_name: Mapped[str] = mapped_column(String(512))
@@ -134,6 +137,37 @@ class Company(Base):
     phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     contact_full_name: Mapped[str] = mapped_column(
         String(255), default="", doc="Nombre y apellidos del contacto principal"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    users: Mapped[list[User]] = relationship(
+        "User", back_populates="client", foreign_keys="User.client_id"
+    )
+    documents: Mapped[list["ClientDocument"]] = relationship(
+        "ClientDocument", back_populates="client", cascade="all, delete-orphan"
+    )
+    timeline_events: Mapped[list["ClientTimelineEvent"]] = relationship(
+        "ClientTimelineEvent",
+        back_populates="client",
+        cascade="all, delete-orphan",
+    )
+    beneficial_owner_links: Mapped[list["ClientBeneficialOwner"]] = relationship(
+        "ClientBeneficialOwner",
+        back_populates="client",
+        cascade="all, delete-orphan",
+    )
+
+
+class BeneficialOwner(Base):
+    """Beneficiario final (persona física). Puede vincularse a varios clientes."""
+
+    __tablename__ = "beneficial_owners"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    full_name: Mapped[str] = mapped_column(String(512))
+    national_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
     )
     kyc_status: Mapped[str] = mapped_column(
         Enum(KycStatus, values_callable=_enum_values), default=KycStatus.draft.value
@@ -148,61 +182,98 @@ class Company(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    users: Mapped[list[User]] = relationship(
-        "User", back_populates="company", foreign_keys="User.company_id"
+    client_links: Mapped[list["ClientBeneficialOwner"]] = relationship(
+        "ClientBeneficialOwner",
+        back_populates="beneficial_owner",
+        cascade="all, delete-orphan",
     )
-    documents: Mapped[list["CompanyDocument"]] = relationship(
-        "CompanyDocument", back_populates="company", cascade="all, delete-orphan"
-    )
-    timeline_events: Mapped[list["CompanyTimelineEvent"]] = relationship(
-        "CompanyTimelineEvent",
-        back_populates="company",
+    documents: Mapped[list["BeneficialOwnerDocument"]] = relationship(
+        "BeneficialOwnerDocument",
+        back_populates="beneficial_owner",
         cascade="all, delete-orphan",
     )
 
 
-class CompanyTimelineEvent(Base):
-    __tablename__ = "company_timeline_events"
+class ClientBeneficialOwner(Base):
+    """N:M cliente ↔ beneficiario final."""
+
+    __tablename__ = "client_beneficial_owners"
+    __table_args__ = (
+        UniqueConstraint("client_id", "beneficial_owner_id", name="uq_client_beneficial_owner"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    company_id: Mapped[int] = mapped_column(
-        ForeignKey("companies.id", ondelete="CASCADE"), index=True
+    client_id: Mapped[int] = mapped_column(
+        ForeignKey("clients.id", ondelete="CASCADE"), index=True
+    )
+    beneficial_owner_id: Mapped[int] = mapped_column(
+        ForeignKey("beneficial_owners.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    client: Mapped["Client"] = relationship("Client", back_populates="beneficial_owner_links")
+    beneficial_owner: Mapped["BeneficialOwner"] = relationship(
+        "BeneficialOwner", back_populates="client_links"
+    )
+
+
+class ClientTimelineEvent(Base):
+    __tablename__ = "client_timeline_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    client_id: Mapped[int] = mapped_column(
+        ForeignKey("clients.id", ondelete="CASCADE"), index=True
     )
     event_type: Mapped[str] = mapped_column(String(64))
     message: Mapped[str] = mapped_column(String(1024))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    company: Mapped["Company"] = relationship("Company", back_populates="timeline_events")
+    client: Mapped["Client"] = relationship("Client", back_populates="timeline_events")
 
 
-class CompanyDocument(Base):
-    __tablename__ = "company_documents"
+class ClientDocument(Base):
+    """Documentación del expediente del cliente (no identidad UBO — eso va en beneficial_owner_documents)."""
+
+    __tablename__ = "client_documents"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    company_id: Mapped[int] = mapped_column(
-        ForeignKey("companies.id", ondelete="CASCADE")
-    )
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"))
     file_path: Mapped[str] = mapped_column(String(1024))
     original_name: Mapped[str] = mapped_column(String(512))
-    document_type: Mapped[str] = mapped_column(
-        String(64)
-    )  # ruc, registro_mercantil, ubo_identidad, etc.
-    party_name: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True, doc="Nombre del beneficiario final (documentos UBO)"
-    )
+    document_type: Mapped[str] = mapped_column(String(64))
+    party_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    company: Mapped[Company] = relationship("Company", back_populates="documents")
+    client: Mapped[Client] = relationship("Client", back_populates="documents")
+
+
+class BeneficialOwnerDocument(Base):
+    __tablename__ = "beneficial_owner_documents"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    beneficial_owner_id: Mapped[int] = mapped_column(
+        ForeignKey("beneficial_owners.id", ondelete="CASCADE"), index=True
+    )
+    file_path: Mapped[str] = mapped_column(String(1024))
+    original_name: Mapped[str] = mapped_column(String(512))
+    document_type: Mapped[str] = mapped_column(String(64), default="identity")
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    beneficial_owner: Mapped["BeneficialOwner"] = relationship(
+        "BeneficialOwner", back_populates="documents"
+    )
 
 
 class Invoice(Base):
     __tablename__ = "invoices"
-    __table_args__ = (Index("ix_invoices_company_payer", "company_id", "payer"),)
+    __table_args__ = (Index("ix_invoices_client_payer", "client_id", "payer"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"))
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"))
     invoice_number: Mapped[str] = mapped_column(String(128), index=True)
     issuer: Mapped[str] = mapped_column(String(512))
     payer: Mapped[str] = mapped_column(String(512))
@@ -223,7 +294,7 @@ class Invoice(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), onupdate=func.now()
     )
-    company: Mapped[Company] = relationship("Company")
+    client: Mapped[Client] = relationship("Client")
     operation_links: Mapped[list["OperationInvoice"]] = relationship(
         "OperationInvoice", back_populates="invoice"
     )
@@ -233,7 +304,7 @@ class Quotation(Base):
     __tablename__ = "quotations"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"))
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"))
     invoice_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True
     )
@@ -251,7 +322,7 @@ class Quotation(Base):
     responded_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    company: Mapped[Company] = relationship("Company")
+    client: Mapped[Client] = relationship("Client")
     invoice: Mapped[Optional[Invoice]] = relationship("Invoice")
 
 
@@ -259,7 +330,7 @@ class Contract(Base):
     __tablename__ = "contracts"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"))
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"))
     contract_type: Mapped[str] = mapped_column(
         Enum(ContractType, values_callable=_enum_values)
     )
@@ -273,7 +344,7 @@ class Contract(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    company: Mapped[Company] = relationship("Company")
+    client: Mapped[Client] = relationship("Client")
 
 
 class FactoringOperation(Base):
@@ -281,7 +352,7 @@ class FactoringOperation(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(32), unique=True, index=True)
-    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"))
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"))
     status: Mapped[str] = mapped_column(
         Enum(OperationStatus, values_callable=_enum_values),
         default=OperationStatus.draft.value,
@@ -299,7 +370,7 @@ class FactoringOperation(Base):
     closed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    company: Mapped[Company] = relationship("Company")
+    client: Mapped[Client] = relationship("Client")
     quotation: Mapped[Optional[Quotation]] = relationship("Quotation")
     invoices: Mapped[list["OperationInvoice"]] = relationship(
         "OperationInvoice", back_populates="operation", cascade="all, delete-orphan"
@@ -393,7 +464,7 @@ class ValidationBatch(Base):
     __tablename__ = "validation_batches"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"))
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"))
     uploaded_by_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     file_path: Mapped[str] = mapped_column(String(1024))
     original_name: Mapped[str] = mapped_column(String(512))

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, is_finecta_user
 from app.db import models
 from app.db.models.models import (
+    BeneficialOwner,
     Disbursement,
     FactoringOperation,
     Invoice,
@@ -32,9 +33,9 @@ def kpis(
         kyc = (
             db.execute(
                 select(func.count())
-                .select_from(models.Company)
+                .select_from(BeneficialOwner)
                 .where(
-                    models.Company.kyc_status.in_(
+                    BeneficialOwner.kyc_status.in_(
                         (KycStatus.in_review.value, KycStatus.submitted.value)
                     )
                 )
@@ -91,12 +92,12 @@ def kpis(
             my_operations=0,
             open_quotations=int(qpen),
         )
-    if not user.company_id:
+    if not user.client_id:
         return DashboardKpis()
-    cid = user.company_id
+    cid = user.client_id
     invc = (
         db.execute(
-            select(func.count()).select_from(Invoice).where(Invoice.company_id == cid)
+            select(func.count()).select_from(Invoice).where(Invoice.client_id == cid)
         ).scalar()
         or 0
     )
@@ -104,7 +105,7 @@ def kpis(
         db.execute(
             select(func.count())
             .select_from(FactoringOperation)
-            .where(FactoringOperation.company_id == cid)
+            .where(FactoringOperation.client_id == cid)
         ).scalar()
         or 0
     )
@@ -113,7 +114,7 @@ def kpis(
             select(func.count())
             .select_from(Quotation)
             .where(
-                Quotation.company_id == cid,
+                Quotation.client_id == cid,
                 Quotation.status == QuotationStatus.pending.value,
             )
         ).scalar()
@@ -134,8 +135,8 @@ def kpis(
 def portfolio_analytics(
     db: Session = Depends(get_db), user: models.User = Depends(get_current_user)
 ) -> PortfolioAnalyticsOut:
-    if user.role == UserRole.payer.value and not user.company_id:
+    if user.role == UserRole.payer.value and not user.client_id:
         return PortfolioAnalyticsOut(
-            has_data=False, scope="company", company_id=None, summary={}
+            has_data=False, scope="client", client_id=None, summary={}
         )
     return build_portfolio_analytics(db, user)

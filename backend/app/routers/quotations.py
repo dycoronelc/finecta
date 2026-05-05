@@ -18,17 +18,17 @@ router = APIRouter(prefix="/quotations", tags=["Cotizaciones"])
 
 @router.get("", response_model=list[QuotationOut])
 def list_q(
-    company_id: int | None = None,
+    client_id: int | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ) -> list[Quotation]:
     b = select(Quotation)
     if not is_finecta_user(user):
-        if not user.company_id:
+        if not user.client_id:
             return []
-        b = b.where(Quotation.company_id == user.company_id)
-    elif company_id:
-        b = b.where(Quotation.company_id == company_id)
+        b = b.where(Quotation.client_id == user.client_id)
+    elif client_id:
+        b = b.where(Quotation.client_id == client_id)
     return list(db.scalars(b.order_by(Quotation.id.desc())))
 
 
@@ -54,7 +54,7 @@ def create_q(
     com = (body.amount_base * body.commission_rate).quantize(Decimal("0.01"))
     op_cost = body.operational_cost
     q = Quotation(
-        company_id=inv.company_id,
+        client_id=inv.client_id,
         invoice_id=inv.id,
         amount_base=body.amount_base,
         commission=com,
@@ -79,7 +79,7 @@ def respond(
     q = db.get(Quotation, qid)
     if not q:
         raise HTTPException(404, "Cotización inexistente")
-    if not user.company_id or q.company_id != user.company_id:
+    if not user.client_id or q.client_id != user.client_id:
         raise HTTPException(403, "Solo su empresa")
     if q.status != QuotationStatus.pending.value:
         raise HTTPException(400, "Cotización ya respondida")

@@ -25,8 +25,8 @@ export function InvoicesPage() {
   const { user } = useAuth();
   const staff = user?.role === "admin" || user?.role === "analyst";
   const [rows, setRows] = useState<Inv[]>([]);
-  const [companies, setCompanies] = useState<Co[]>([]);
-  const [companyId, setCompanyId] = useState("");
+  const [clients, setClients] = useState<Co[]>([]);
+  const [clientId, setClientId] = useState("");
   const [payerOpts, setPayerOpts] = useState<PayerOpt[]>([]);
   const [payerPick, setPayerPick] = useState("");
   const [q, setQ] = useState("");
@@ -37,22 +37,22 @@ export function InvoicesPage() {
 
   useEffect(() => {
     if (!staff) return;
-    api<Co[]>("/companies")
-      .then(setCompanies)
-      .catch(() => setCompanies([]));
+    api<Co[]>("/clients")
+      .then(setClients)
+      .catch(() => setClients([]));
   }, [staff]);
 
   useEffect(() => {
     const run = async () => {
-      if (staff && !companyId) {
+      if (staff && !clientId) {
         setPayerOpts([]);
         setPayerPick("");
         return;
       }
       try {
         const path =
-          staff && companyId
-            ? `/invoices/payer-options?company_id=${encodeURIComponent(companyId)}`
+          staff && clientId
+            ? `/invoices/payer-options?client_id=${encodeURIComponent(clientId)}`
             : "/invoices/payer-options";
         const opts = await api<PayerOpt[]>(path);
         setPayerOpts(opts);
@@ -61,13 +61,13 @@ export function InvoicesPage() {
       }
     };
     void run();
-  }, [staff, companyId, user?.company_id]);
+  }, [staff, clientId, user?.client_id]);
 
   async function load() {
     const p = new URLSearchParams();
     if (q) p.set("q", q);
     if (st) p.set("status", st);
-    if (staff && companyId) p.set("company_id", companyId);
+    if (staff && clientId) p.set("client_id", clientId);
     if (payerPick) {
       const opt = payerOpts.find(
         (o) => `${o.payer}||${o.payer_tax_id ?? ""}` === payerPick
@@ -83,7 +83,7 @@ export function InvoicesPage() {
   useEffect(() => {
     load().catch((e) => setErr(e instanceof Error ? e.message : "Error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [st, companyId, staff, user?.company_id]);
+  }, [st, clientId, staff, user?.client_id]);
 
   async function upload() {
     if (!file) return;
@@ -92,7 +92,7 @@ export function InvoicesPage() {
     setErr(null);
     try {
       const p = new URLSearchParams();
-      if (staff && companyId) p.set("company_id", companyId);
+      if (staff && clientId) p.set("client_id", clientId);
       const qstr = p.toString();
       await api<Inv>(`/invoices${qstr ? `?${qstr}` : ""}`, { method: "POST", formData: fd });
       setFile(null);
@@ -119,11 +119,11 @@ export function InvoicesPage() {
               <p className="text-xs text-zinc-500 mb-1">Empresa destino (staff)</p>
               <select
                 className="f-input w-full text-sm"
-                value={companyId}
-                onChange={(e) => setCompanyId(e.target.value)}
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
               >
                 <option value="">Empresa del usuario (subir como cliente no aplica)</option>
-                {companies.map((c) => (
+                {clients.map((c) => (
                   <option key={c.id} value={String(c.id)}>
                     {c.legal_name} (#{c.id})
                   </option>
@@ -146,7 +146,7 @@ export function InvoicesPage() {
             type="button"
             className="f-btn-primary text-xs w-full sm:w-auto"
             onClick={() => void upload()}
-            disabled={!file || (staff && !companyId)}
+            disabled={!file || (staff && !clientId)}
           >
             Subir y extraer datos
           </button>
@@ -160,14 +160,14 @@ export function InvoicesPage() {
                 <p className="text-xs text-zinc-500 mb-1">Empresa</p>
                 <select
                   className="f-input w-full text-sm"
-                  value={companyId}
+                  value={clientId}
                   onChange={(e) => {
-                    setCompanyId(e.target.value);
+                    setClientId(e.target.value);
                     setPayerPick("");
                   }}
                 >
                   <option value="">Todas las empresas</option>
-                  {companies.map((c) => (
+                  {clients.map((c) => (
                     <option key={c.id} value={String(c.id)}>
                       {c.legal_name}
                     </option>
@@ -180,7 +180,7 @@ export function InvoicesPage() {
                   className="f-input w-full text-sm"
                   value={payerPick}
                   onChange={(e) => setPayerPick(e.target.value)}
-                  disabled={staff && !companyId}
+                  disabled={staff && !clientId}
                 >
                   <option value="">Todos los pagadores</option>
                   {payerOpts.map((o) => (

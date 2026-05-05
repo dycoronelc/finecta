@@ -29,7 +29,7 @@ const PIE_COLORS = [
 export type PortfolioAnalytics = {
   has_data: boolean;
   scope: string;
-  company_id: number | null;
+  client_id: number | null;
   summary: {
     invoices?: number;
     total_amount?: string;
@@ -38,8 +38,8 @@ export type PortfolioAnalytics = {
     date_from?: string | null;
     date_to?: string | null;
   };
-  volume_by_company: {
-    company_id: number;
+  volume_by_client: {
+    client_id: number;
     legal_name: string;
     invoice_count: number;
     total_amount: string;
@@ -116,7 +116,7 @@ export function PortfolioAnalyticsBlock({ data, error, loading }: Props) {
     ...m,
     amountNum: parseAmount(m.amount),
   }));
-  const volData = data.volume_by_company.map((v) => ({
+  const volData = (data.volume_by_client ?? []).map((v) => ({
     name: v.legal_name.length > 32 ? `${v.legal_name.slice(0, 30)}…` : v.legal_name,
     fullName: v.legal_name,
     amountNum: parseAmount(v.total_amount),
@@ -140,7 +140,7 @@ export function PortfolioAnalyticsBlock({ data, error, loading }: Props) {
     count: c.count,
   }));
 
-  const scopeLabel = data.scope === "platform" ? "Toda la plataforma" : "Su empresa";
+  const scopeLabel = data.scope === "platform" ? "Toda la plataforma" : "Su cliente";
 
   return (
     <div className="space-y-4 md:space-y-5">

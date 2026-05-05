@@ -8,7 +8,7 @@ import { StatusBadge } from "../components/ui/StatusBadge";
 type Op = {
   id: number;
   code: string;
-  company_id: number;
+  client_id: number;
   status: string;
   total_invoiced: string;
   total_disbursed: string | null;
@@ -22,23 +22,23 @@ export function OperationsPage() {
   const { user } = useAuth();
   const staff = user?.role === "admin" || user?.role === "analyst";
   const [rows, setRows] = useState<Op[]>([]);
-  const [companies, setCompanies] = useState<Co[]>([]);
-  const [companyId, setCompanyId] = useState("");
+  const [clients, setClients] = useState<Co[]>([]);
+  const [clientId, setClientId] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     if (!staff) return;
-    api<Co[]>("/companies")
-      .then(setCompanies)
-      .catch(() => setCompanies([]));
+    api<Co[]>("/clients")
+      .then(setClients)
+      .catch(() => setClients([]));
   }, [staff]);
 
   useEffect(() => {
-    const q = companyId ? `?company_id=${encodeURIComponent(companyId)}` : "";
+    const q = clientId ? `?client_id=${encodeURIComponent(clientId)}` : "";
     api<Op[]>(`/operations${q}`)
       .then(setRows)
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
-  }, [companyId]);
+  }, [clientId]);
 
   return (
     <div className="f-page w-full min-w-0">
@@ -46,14 +46,14 @@ export function OperationsPage() {
       {staff && (
         <div className="flex flex-wrap items-end gap-2 max-w-md">
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-zinc-500 mb-1">Empresa</p>
+            <p className="text-xs text-zinc-500 mb-1">Cliente</p>
             <select
               className="f-input w-full text-sm"
-              value={companyId}
-              onChange={(e) => setCompanyId(e.target.value)}
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
             >
-              <option value="">Todas</option>
-              {companies.map((c) => (
+              <option value="">Todos</option>
+              {clients.map((c) => (
                 <option key={c.id} value={String(c.id)}>
                   {c.legal_name}
                 </option>

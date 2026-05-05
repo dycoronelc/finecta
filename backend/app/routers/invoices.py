@@ -27,31 +27,31 @@ def _digits_tax(s: str | None) -> str:
     return re.sub(r"\D", "", s)
 
 
-def _client_company_id(user: models.User) -> int:
-    if not user.company_id:
-        raise HTTPException(403, "Solo clientes o empresa requerida")
-    return user.company_id
+def _require_client_id(user: models.User) -> int:
+    if not user.client_id:
+        raise HTTPException(403, "Solo clientes o cliente requerido")
+    return user.client_id
 
 
 @router.get("/payer-options", response_model=list[InvoicePayerFilterOption])
 def list_payer_filter_options(
-    company_id: int | None = None,
+    client_id: int | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ) -> list[InvoicePayerFilterOption]:
     """Pagadores distintos registrados en facturas (para filtros cuando hay varios por emisor)."""
     cid: int
     if is_finecta_user(user):
-        if not company_id:
+        if not client_id:
             raise HTTPException(
-                400, "Indique company_id para listar pagadores de esa empresa"
+                400, "Indique client_id para listar pagadores de ese cliente"
             )
-        cid = company_id
+        cid = client_id
     else:
-        cid = _client_company_id(user)
+        cid = _require_client_id(user)
     rows = db.execute(
         select(Invoice.payer, Invoice.payer_tax_id)
-        .where(Invoice.company_id == cid)
+        .where(Invoice.client_id == cid)
         .where(Invoice.payer != "")
         .distinct()
         .order_by(Invoice.payer.asc())
@@ -63,7 +63,7 @@ def list_payer_filter_options(
 def list_invoices(
     status: str | None = None,
     q: str | None = None,
-    company_id: int | None = None,
+    client_id: int | None = None,
     payer: str | None = Query(
         None, description="Filtra por nombre de pagador (contiene, sin distinguir mayúsculas)"
     ),
@@ -77,9 +77,9 @@ def list_invoices(
 ) -> list[Invoice]:
     b = select(Invoice)
     if not is_finecta_user(user):
-        b = b.where(Invoice.company_id == _client_company_id(user))
-    elif company_id:
-        b = b.where(Invoice.company_id == company_id)
+        b = b.where(Invoice.client_id == _require_client_id(user))
+    elif client_id:
+        b = b.where(Invoice.client_id == client_id)
     if status:
         b = b.where(Invoice.status == status)
     if payer:
@@ -117,7 +117,7 @@ def get_invoice(
     inv = db.get(Invoice, inv_id)
     if not inv:
         raise HTTPException(404, "Factura no encontrada")
-    if not is_finecta_user(user) and user.company_id != inv.company_id:
+    if not is_finecta_user(user) and user.client_id != inv.client_id:
         raise HTTPException(403, "Acceso denegado")
     return inv
 
@@ -130,14 +130,14 @@ def get_invoice(
 )
 def upload_invoice(
     file: UploadFile = File(...),
-    company_id: int | None = Query(None, description="Solo staff"),
+    client_id: int | None = Query(None, description="Solo staff"),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ) -> Invoice:
-    if is_finecta_user(user) and company_id:
-        cid = company_id
+    if is_finecta_user(user) and client_id:
+        cid = client_id
     else:
-        cid = _client_company_id(user)
+        cid = _require_client_id(user)
     get_settings().UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     ext = Path(file.filename or "inv.pdf").suffix or ".pdf"
     sub = get_settings().UPLOAD_DIR / "invoices" / str(cid)
@@ -150,7 +150,7 @@ def upload_invoice(
     ext_res = invoice_extraction.extract_from_pdf(path)
     ext_dict = invoice_extraction.to_dict(ext_res)
     inv = Invoice(
-        company_id=cid,
+        client_id=cid,
         invoice_number=ext_res.invoice_number or f"PEND-{uuid.uuid4().hex[:8].upper()}",
         issuer=ext_res.issuer or "—",
         payer=ext_res.payer or "—",
@@ -177,7 +177,7 @@ def update_invoice(
     inv = db.get(Invoice, inv_id)
     if not inv:
         raise HTTPException(404, "Factura no encontrada")
-    if not is_finecta_user(user) and user.company_id != inv.company_id:
+    if not is_finecta_user(user) and user.client_id != inv.client_id:
         raise HTTPException(403, "Acceso denegado")
     for k, v in body.model_dump(exclude_unset=True).items():
         if v is not None and hasattr(inv, k):

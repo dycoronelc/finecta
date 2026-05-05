@@ -5,8 +5,8 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
-# --- Company ---
-class CompanyCreate(BaseModel):
+# --- Client (persona jurídica cliente) ---
+class ClientCreate(BaseModel):
     legal_name: str
     trade_name: str | None = None
     tax_id: str
@@ -15,7 +15,7 @@ class CompanyCreate(BaseModel):
     contact_full_name: str | None = None
 
 
-class CompanyStaffCreate(BaseModel):
+class ClientStaffCreate(BaseModel):
     """Alta de cliente por Finecta (sin usuario portal aún)."""
 
     legal_name: str
@@ -26,7 +26,7 @@ class CompanyStaffCreate(BaseModel):
     contact_full_name: str = Field(..., min_length=2, description="Nombre y apellidos del contacto principal")
 
 
-class CompanyGeneralUpdate(BaseModel):
+class ClientGeneralUpdate(BaseModel):
     legal_name: str | None = None
     trade_name: str | None = None
     tax_id: str | None = None
@@ -35,12 +35,7 @@ class CompanyGeneralUpdate(BaseModel):
     contact_full_name: str | None = None
 
 
-class CompanyUpdate(BaseModel):
-    kyc_status: str | None = None
-    kyc_notes: str | None = None
-
-
-class CompanyOut(BaseModel):
+class ClientOut(BaseModel):
     id: int
     legal_name: str
     trade_name: str | None
@@ -48,11 +43,11 @@ class CompanyOut(BaseModel):
     contact_email: str
     phone: str | None
     contact_full_name: str = ""
-    kyc_status: str
-    kyc_notes: str | None
-    kyc_screening: dict | None = None
-    approved_at: datetime | None
     created_at: datetime
+    kyc_summary: str | None = Field(
+        None,
+        description="Peor estado KYC entre beneficiarios finales vinculados (si aplica)",
+    )
 
     @field_validator("contact_full_name", mode="before")
     @classmethod
@@ -65,7 +60,51 @@ class CompanyOut(BaseModel):
         from_attributes = True
 
 
-class CompanyDocumentOut(BaseModel):
+class BeneficialOwnerOut(BaseModel):
+    id: int
+    full_name: str
+    national_id: str | None
+    kyc_status: str
+    kyc_notes: str | None
+    kyc_screening: dict | None = None
+    approved_at: datetime | None
+    created_at: datetime
+
+    @field_validator("approved_at", mode="before")
+    @classmethod
+    def _coerce_approved_at(cls, v: object) -> datetime | None:
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v
+        s = str(v).strip()
+        if not s or s.startswith("0000-00-00"):
+            return None
+        return v  # type: ignore[return-value]
+
+    class Config:
+        from_attributes = True
+
+
+class BeneficialOwnerKycUpdate(BaseModel):
+    kyc_status: str | None = None
+    kyc_notes: str | None = None
+
+
+class BeneficialOwnerCreate(BaseModel):
+    full_name: str = Field(..., min_length=2)
+    national_id: str | None = None
+
+
+class LinkBeneficialOwnerIn(BaseModel):
+    beneficial_owner_id: int
+
+
+class ClientDetailOut(ClientOut):
+    beneficial_owners: list[BeneficialOwnerOut] = Field(default_factory=list)
+
+
+class ClientDocumentOut(BaseModel):
     id: int
     file_path: str
     original_name: str
@@ -77,7 +116,19 @@ class CompanyDocumentOut(BaseModel):
         from_attributes = True
 
 
-class CompanyTimelineEventOut(BaseModel):
+class BeneficialOwnerDocumentOut(BaseModel):
+    id: int
+    beneficial_owner_id: int
+    file_path: str
+    original_name: str
+    document_type: str
+    uploaded_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ClientTimelineEventOut(BaseModel):
     id: int
     event_type: str
     message: str
@@ -90,7 +141,7 @@ class CompanyTimelineEventOut(BaseModel):
 # --- Invoices ---
 class InvoiceOut(BaseModel):
     id: int
-    company_id: int
+    client_id: int
     invoice_number: str
     issuer: str
     payer: str
@@ -135,7 +186,7 @@ class QuotationCreate(BaseModel):
 
 class QuotationOut(BaseModel):
     id: int
-    company_id: int
+    client_id: int
     invoice_id: int | None
     amount_base: Decimal
     commission: Decimal
@@ -161,7 +212,7 @@ class OperationInvoiceIn(BaseModel):
 
 
 class OperationCreate(BaseModel):
-    company_id: int
+    client_id: int
     quotation_id: int | None = None
     items: list[OperationInvoiceIn]
     allow_multiple_payers: bool = Field(
@@ -184,7 +235,7 @@ class OperationEventOut(BaseModel):
 class OperationOut(BaseModel):
     id: int
     code: str
-    company_id: int
+    client_id: int
     status: str
     total_invoiced: Decimal
     total_disbursed: Decimal | None
@@ -241,7 +292,7 @@ class PaymentCreate(BaseModel):
 # --- Contracts ---
 class ContractOut(BaseModel):
     id: int
-    company_id: int
+    client_id: int
     contract_type: str
     file_path: str | None
     title: str
@@ -256,7 +307,7 @@ class ContractOut(BaseModel):
 # --- Validation ---
 class ValidationOut(BaseModel):
     id: int
-    company_id: int
+    client_id: int
     original_name: str
     status: str
     results: dict | None

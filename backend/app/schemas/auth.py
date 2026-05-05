@@ -15,7 +15,7 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=6)
     full_name: str
     role: UserRole = UserRole.client
-    company_id: int | None = None
+    client_id: int | None = None
 
 
 class UserOut(BaseModel):
@@ -24,7 +24,7 @@ class UserOut(BaseModel):
     full_name: str
     role: str
     is_active: bool
-    company_id: int | None
+    client_id: int | None
     created_at: datetime
 
     class Config:

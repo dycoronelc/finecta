@@ -22,7 +22,7 @@ export type User = {
   full_name: string;
   role: Role;
   is_active: boolean;
-  company_id: number | null;
+  client_id: number | null;
 };
 
 type AuthState = {

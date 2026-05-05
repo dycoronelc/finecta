@@ -3,24 +3,24 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { StatusBadge } from "../components/ui/StatusBadge";
 
-type Client = {
+type ClientRow = {
   id: number;
   legal_name: string;
   tax_id: string;
   contact_full_name: string;
   phone: string | null;
   contact_email: string;
-  kyc_status: string;
+  kyc_summary: string | null;
 };
 
 export function ClientsPage() {
-  const [rows, setRows] = useState<Client[]>([]);
+  const [rows, setRows] = useState<ClientRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [kyc, setKyc] = useState<"" | "submitted" | "in_review" | "approved" | "rejected" | "draft">("");
 
   async function load() {
     const p = kyc ? `?kyc=${kyc}` : "";
-    setRows(await api<Client[]>(`/companies${p}`));
+    setRows(await api<ClientRow[]>(`/clients${p}`));
   }
 
   useEffect(() => {
@@ -42,7 +42,7 @@ export function ClientsPage() {
           value={kyc}
           onChange={(e) => setKyc(e.target.value as never)}
         >
-          <option value="">Todos los estados KYC</option>
+          <option value="">Todos los estados KYC (UBO)</option>
           <option value="draft">Borrador</option>
           <option value="submitted">Enviada</option>
           <option value="in_review">En revisión</option>
@@ -63,7 +63,7 @@ export function ClientsPage() {
                 <th className="py-2 pr-2">Contacto principal</th>
                 <th className="py-2 pr-2">Teléfono</th>
                 <th className="py-2 pr-2">Correo</th>
-                <th className="py-2 pr-2">KYC</th>
+                <th className="py-2 pr-2">KYC (UBO)</th>
                 <th className="py-2"> </th>
               </tr>
             </thead>
@@ -76,7 +76,7 @@ export function ClientsPage() {
                   <td className="py-2.5 pr-2 text-xs text-zinc-600">{c.phone || "—"}</td>
                   <td className="py-2.5 pr-2 text-xs text-zinc-600 break-all">{c.contact_email}</td>
                   <td className="py-2.5 pr-2">
-                    <StatusBadge status={c.kyc_status} />
+                    <StatusBadge status={c.kyc_summary ?? "draft"} />
                   </td>
                   <td className="py-2.5 text-right">
                     <Link

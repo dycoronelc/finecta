@@ -1,7 +1,10 @@
 from app.db.models.models import (  # noqa: F401
-    Company,
-    CompanyDocument,
-    CompanyTimelineEvent,
+    BeneficialOwner,
+    BeneficialOwnerDocument,
+    Client,
+    ClientBeneficialOwner,
+    ClientDocument,
+    ClientTimelineEvent,
     Contract,
     Disbursement,
     FactoringOperation,
@@ -15,9 +18,12 @@ from app.db.models.models import (  # noqa: F401
 )
 
 __all__ = [
-    "Company",
-    "CompanyDocument",
-    "CompanyTimelineEvent",
+    "BeneficialOwner",
+    "BeneficialOwnerDocument",
+    "Client",
+    "ClientBeneficialOwner",
+    "ClientDocument",
+    "ClientTimelineEvent",
     "Contract",
     "Disbursement",
     "FactoringOperation",

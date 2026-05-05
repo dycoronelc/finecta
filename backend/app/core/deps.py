@@ -69,12 +69,12 @@ def is_finecta_user(user: models.User) -> bool:
     )
 
 
-def company_scope_user_ids(db: Session, company_id: int) -> set[int]:
+def client_scope_user_ids(db: Session, client_id: int) -> set[int]:
     from sqlalchemy import select
 
     r = db.execute(
         select(models.User.id).where(
-            models.User.company_id == company_id, models.User.is_active.is_(True)
+            models.User.client_id == client_id, models.User.is_active.is_(True)
         )
     )
     return {row[0] for row in r}

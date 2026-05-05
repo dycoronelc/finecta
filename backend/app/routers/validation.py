@@ -28,16 +28,16 @@ router = APIRouter(
 )
 def upload(
     file: UploadFile = File(...),
-    company_id: int | None = None,
+    client_id: int | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ) -> models.ValidationBatch:
-    if is_finecta_user(user) and company_id:
-        cid = company_id
+    if is_finecta_user(user) and client_id:
+        cid = client_id
     else:
-        if not user.company_id:
+        if not user.client_id:
             raise HTTPException(400, "Empresa requerida")
-        cid = user.company_id
+        cid = user.client_id
     sub = get_settings().UPLOAD_DIR / "validations" / str(cid)
     sub.mkdir(parents=True, exist_ok=True)
     ext = Path(file.filename or "x.xlsx").suffix or ".xlsx"
@@ -46,7 +46,7 @@ def upload(
         shutil.copyfileobj(file.file, f)
     rel = str(p.relative_to(get_settings().UPLOAD_DIR))
     b = models.ValidationBatch(
-        company_id=cid,
+        client_id=cid,
         uploaded_by_id=user.id,
         file_path=rel,
         original_name=file.filename or "carga.xlsx",
@@ -73,17 +73,17 @@ def upload(
     summary="Historial de validaciones (batch)",
 )
 def list_batches(
-    company_id: int | None = None,
+    client_id: int | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ) -> list[models.ValidationBatch]:
     from sqlalchemy import select
 
     q = select(models.ValidationBatch)
-    if is_finecta_user(user) and company_id:
-        q = q.where(models.ValidationBatch.company_id == company_id)
-    elif not is_finecta_user(user) and user.company_id:
-        q = q.where(models.ValidationBatch.company_id == user.company_id)
+    if is_finecta_user(user) and client_id:
+        q = q.where(models.ValidationBatch.client_id == client_id)
+    elif not is_finecta_user(user) and user.client_id:
+        q = q.where(models.ValidationBatch.client_id == user.client_id)
     elif not is_finecta_user(user):
         return []
     return list(

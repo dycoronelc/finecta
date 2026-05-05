@@ -5,14 +5,10 @@ import { FilePicker } from "../components/ui/FilePicker";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { fmtDateShort } from "../lib/format";
 
-type Company = {
+type BeneficialOwnerRow = {
   id: number;
-  legal_name: string;
-  trade_name: string | null;
-  tax_id: string;
-  contact_email: string;
-  phone: string | null;
-  contact_full_name: string;
+  full_name: string;
+  national_id: string | null;
   kyc_status: string;
   kyc_notes: string | null;
   kyc_screening: {
@@ -22,6 +18,20 @@ type Company = {
     last_request_reference?: string;
   } | null;
   approved_at: string | null;
+  created_at: string;
+};
+
+type ClientDetail = {
+  id: number;
+  legal_name: string;
+  trade_name: string | null;
+  tax_id: string;
+  contact_email: string;
+  phone: string | null;
+  contact_full_name: string;
+  created_at: string;
+  beneficial_owners: BeneficialOwnerRow[];
+  kyc_summary?: string | null;
 };
 
 type Doc = {
@@ -39,7 +49,15 @@ type TimelineEv = {
   created_at: string;
 };
 
-/** Expediente societario / legal — recomendado; el KYC en listas se centra en los UBO. */
+function parseRouteClientId(param: string | undefined): number | null {
+  if (param == null) return null;
+  const t = param.trim();
+  if (t === "" || t === "nuevo" || t === "undefined") return null;
+  if (!/^\d+$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
 const EXPEDIENTE_DOCS: { type: string; label: string }[] = [
   { type: "registro_mercantil", label: "Certificado de Registro Mercantil" },
   { type: "rnc_documento", label: "RNC" },
@@ -52,13 +70,14 @@ type TabId = "general" | "docs" | "kyc";
 export function ClientDetailPage() {
   const { id } = useParams();
   const nav = useNavigate();
-  const isNew = id === "nuevo";
+  const isNew = !id || id === "nuevo";
   const [tab, setTab] = useState<TabId>("general");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [co, setCo] = useState<Company | null>(null);
+  const [co, setCo] = useState<ClientDetail | null>(null);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [timeline, setTimeline] = useState<TimelineEv[]>([]);
+  const [kycBoId, setKycBoId] = useState<number | null>(null);
 
   const [legal_name, setLegalName] = useState("");
   const [trade_name, setTradeName] = useState("");
@@ -68,24 +87,12 @@ export function ClientDetailPage() {
   const [contact_full_name, setContactFullName] = useState("");
 
   const [uboName, setUboName] = useState("");
+  const [uboNationalId, setUboNationalId] = useState("");
   const [uboFile, setUboFile] = useState<File | null>(null);
   const [rejectNotes, setRejectNotes] = useState("");
 
-  const loadDocs = useCallback(async (companyId: number) => {
-    const d = await api<Doc[]>(`/companies/${companyId}/documents`);
-    setDocs(d);
-  }, []);
-
-  const loadTimeline = useCallback(async (companyId: number) => {
-    try {
-      const t = await api<TimelineEv[]>(`/companies/${companyId}/timeline`);
-      setTimeline(t);
-    } catch {
-      setTimeline([]);
-    }
-  }, []);
-
-  const applyCompany = useCallback((c: Company) => {
+  const loadClient = useCallback(async (clientId: number) => {
+    const c = await api<ClientDetail>(`/clients/${clientId}`);
     setCo(c);
     setLegalName(c.legal_name);
     setTradeName(c.trade_name ?? "");
@@ -93,6 +100,26 @@ export function ClientDetailPage() {
     setContactEmail(c.contact_email);
     setPhone(c.phone ?? "");
     setContactFullName(c.contact_full_name ?? "");
+    if (c.beneficial_owners.length > 0) {
+      setKycBoId((prev) => (prev != null && c.beneficial_owners.some((b) => b.id === prev) ? prev : c.beneficial_owners[0].id));
+    } else {
+      setKycBoId(null);
+    }
+    return c;
+  }, []);
+
+  const loadDocs = useCallback(async (clientId: number) => {
+    const d = await api<Doc[]>(`/clients/${clientId}/documents`);
+    setDocs(d);
+  }, []);
+
+  const loadTimeline = useCallback(async (clientId: number) => {
+    try {
+      const t = await api<TimelineEv[]>(`/clients/${clientId}/timeline`);
+      setTimeline(t);
+    } catch {
+      setTimeline([]);
+    }
   }, []);
 
   useEffect(() => {
@@ -106,33 +133,26 @@ export function ClientDetailPage() {
       setPhone("");
       setContactFullName("");
       setTimeline([]);
+      setKycBoId(null);
       return;
     }
-    const cid = Number(id);
-    if (Number.isNaN(cid)) {
+    const cid = parseRouteClientId(id);
+    if (cid == null) {
       setErr("Identificador inválido");
       return;
     }
     setErr(null);
-    Promise.all([
-      api<Company>(`/companies/${cid}`),
-      api<Doc[]>(`/companies/${cid}/documents`),
-      api<TimelineEv[]>(`/companies/${cid}/timeline`),
-    ])
-      .then(([c, d, t]) => {
-        applyCompany(c);
-        setDocs(d);
-        setTimeline(t);
-      })
-      .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
-  }, [id, isNew, applyCompany]);
+    Promise.all([loadClient(cid), loadDocs(cid), loadTimeline(cid)]).catch((e) =>
+      setErr(e instanceof Error ? e.message : "Error")
+    );
+  }, [id, isNew, loadClient, loadDocs, loadTimeline]);
 
   async function saveGeneral() {
     setErr(null);
     setBusy(true);
     try {
       if (isNew) {
-        const c = await api<Company>("/companies", {
+        const c = await api<{ id: number }>("/clients", {
           method: "POST",
           json: {
             legal_name: legal_name.trim(),
@@ -146,13 +166,14 @@ export function ClientDetailPage() {
         nav(`/app/clientes/${c.id}`, { replace: true });
         return;
       }
-      const routeCompanyId = id ? Number(id) : NaN;
-      const companyId = co?.id ?? (Number.isNaN(routeCompanyId) ? null : routeCompanyId);
-      if (!companyId) {
+      const routeId = parseRouteClientId(id);
+      const fromCo = co != null && typeof co.id === "number" && co.id > 0 ? co.id : null;
+      const clientId = fromCo ?? routeId;
+      if (clientId == null) {
         setErr("No se pudo identificar el cliente para guardar cambios.");
         return;
       }
-      const c = await api<Company>(`/companies/${companyId}`, {
+      const c = await api<ClientDetail>(`/clients/${clientId}`, {
         method: "PATCH",
         json: {
           legal_name: legal_name.trim(),
@@ -163,7 +184,7 @@ export function ClientDetailPage() {
           contact_full_name: contact_full_name.trim(),
         },
       });
-      applyCompany(c);
+      await loadClient(c.id);
       await loadTimeline(c.id);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error");
@@ -180,7 +201,7 @@ export function ClientDetailPage() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("document_type", docType);
-      await api(`/companies/${co.id}/documents`, { method: "POST", formData: fd });
+      await api(`/clients/${co.id}/documents`, { method: "POST", formData: fd });
       await loadDocs(co.id);
       await loadTimeline(co.id);
     } catch (e) {
@@ -198,14 +219,21 @@ export function ClientDetailPage() {
     setErr(null);
     setBusy(true);
     try {
+      const bo = await api<BeneficialOwnerRow>(`/clients/${co.id}/beneficial-owners`, {
+        method: "POST",
+        json: {
+          full_name: uboName.trim(),
+          national_id: uboNationalId.trim() || null,
+        },
+      });
       const fd = new FormData();
       fd.append("file", uboFile);
-      fd.append("document_type", "ubo_identidad");
-      fd.append("party_name", uboName.trim());
-      await api(`/companies/${co.id}/documents`, { method: "POST", formData: fd });
+      fd.append("document_type", "identity");
+      await api(`/clients/${co.id}/beneficial-owners/${bo.id}/documents`, { method: "POST", formData: fd });
       setUboFile(null);
       setUboName("");
-      await loadDocs(co.id);
+      setUboNationalId("");
+      await loadClient(co.id);
       await loadTimeline(co.id);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error");
@@ -214,13 +242,20 @@ export function ClientDetailPage() {
     }
   }
 
+  const selectedBo = co?.beneficial_owners.find((b) => b.id === kycBoId) ?? null;
+
   async function requestScreening() {
-    if (!co) return;
+    if (!co || kycBoId == null) {
+      setErr("Seleccione un beneficiario final para la consulta en listas.");
+      return;
+    }
     setBusy(true);
     setErr(null);
     try {
-      const c = await api<Company>(`/companies/${co.id}/kyc-screening/request`, { method: "POST" });
-      applyCompany(c);
+      await api<BeneficialOwnerRow>(`/clients/${co.id}/beneficial-owners/${kycBoId}/kyc-screening/request`, {
+        method: "POST",
+      });
+      await loadClient(co.id);
       await loadTimeline(co.id);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error");
@@ -229,8 +264,8 @@ export function ClientDetailPage() {
     }
   }
 
-  async function setKycStatus(s: Company["kyc_status"]) {
-    if (!co) return;
+  async function setKycStatus(s: BeneficialOwnerRow["kyc_status"]) {
+    if (!co || kycBoId == null) return;
     setBusy(true);
     setErr(null);
     try {
@@ -243,9 +278,12 @@ export function ClientDetailPage() {
         }
         body.kyc_notes = rejectNotes.trim();
       }
-      const c = await api<Company>(`/companies/${co.id}/kyc`, { method: "PATCH", json: body });
-      applyCompany(c);
+      await api<BeneficialOwnerRow>(`/clients/${co.id}/beneficial-owners/${kycBoId}/kyc`, {
+        method: "PATCH",
+        json: body,
+      });
       setRejectNotes("");
+      await loadClient(co.id);
       await loadTimeline(co.id);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error");
@@ -270,7 +308,6 @@ export function ClientDetailPage() {
   );
 
   const docsByType = (t: string) => docs.filter((d) => d.document_type === t);
-  const uboDocs = docs.filter((d) => d.document_type === "ubo_identidad");
 
   return (
     <div className="f-page w-full min-w-0">
@@ -358,7 +395,7 @@ export function ClientDetailPage() {
             <div className="f-panel w-full min-w-0">
               <h2 className="text-base font-semibold text-zinc-900">Beneficiarios finales</h2>
               <p className="text-sm text-zinc-700 mt-1 leading-relaxed">
-                Debe solicitarse por <strong>cada beneficiario final</strong>:
+                Cada beneficiario final es una persona física con su propio KYC. Puede vincularse a más de un cliente.
               </p>
               {!co ? (
                 <p className="text-sm text-zinc-500 mt-3">Guarde primero los datos del cliente para registrar beneficiarios.</p>
@@ -369,6 +406,12 @@ export function ClientDetailPage() {
                     placeholder="Nombre completo"
                     value={uboName}
                     onChange={(e) => setUboName(e.target.value)}
+                  />
+                  <input
+                    className="f-input w-full font-mono text-sm"
+                    placeholder="Cédula / ID (opcional)"
+                    value={uboNationalId}
+                    onChange={(e) => setUboNationalId(e.target.value)}
                   />
                   <FilePicker
                     accept="image/*,application/pdf"
@@ -391,19 +434,21 @@ export function ClientDetailPage() {
                       <thead className="bg-zinc-50 text-zinc-600">
                         <tr>
                           <th className="px-3 py-2 text-left font-medium">Nombre completo</th>
-                          <th className="px-3 py-2 text-left font-medium">Documento de identidad</th>
-                          <th className="px-3 py-2 text-left font-medium">Fecha</th>
+                          <th className="px-3 py-2 text-left font-medium">ID</th>
+                          <th className="px-3 py-2 text-left font-medium">KYC</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {uboDocs.map((d) => (
-                          <tr key={d.id} className="border-t border-zinc-100">
-                            <td className="px-3 py-2">{d.party_name || "—"}</td>
-                            <td className="px-3 py-2">{d.original_name}</td>
-                            <td className="px-3 py-2 text-zinc-500">{d.uploaded_at?.slice(0, 10)}</td>
+                        {(co.beneficial_owners ?? []).map((b) => (
+                          <tr key={b.id} className="border-t border-zinc-100">
+                            <td className="px-3 py-2">{b.full_name}</td>
+                            <td className="px-3 py-2 font-mono text-xs">{b.national_id || "—"}</td>
+                            <td className="px-3 py-2">
+                              <StatusBadge status={b.kyc_status} />
+                            </td>
                           </tr>
                         ))}
-                        {uboDocs.length === 0 && (
+                        {(co.beneficial_owners ?? []).length === 0 && (
                           <tr>
                             <td className="px-3 py-3 text-zinc-500" colSpan={3}>
                               Aún no hay beneficiarios registrados.
@@ -460,6 +505,12 @@ export function ClientDetailPage() {
               value={uboName}
               onChange={(e) => setUboName(e.target.value)}
             />
+            <input
+              className="f-input w-full max-w-md bg-white font-mono text-sm"
+              placeholder="Cédula / ID (opcional)"
+              value={uboNationalId}
+              onChange={(e) => setUboNationalId(e.target.value)}
+            />
             <FilePicker accept="image/*,application/pdf" value={uboFile} onFileChange={setUboFile} buttonLabel="Identidad del beneficiario" name="ubo" />
             <button
               type="button"
@@ -470,13 +521,15 @@ export function ClientDetailPage() {
               Registrar beneficiario final
             </button>
             <ul className="text-sm divide-y divide-orange-100 border border-orange-100 rounded-lg bg-white">
-              {uboDocs.map((d) => (
-                <li key={d.id} className="px-3 py-2 flex justify-between gap-2">
-                  <span className="font-medium text-zinc-800">{d.party_name || "—"}</span>
-                  <span className="text-zinc-500 text-xs truncate">{d.original_name}</span>
+              {(co.beneficial_owners ?? []).map((b) => (
+                <li key={b.id} className="px-3 py-2 flex flex-wrap justify-between gap-2">
+                  <span className="font-medium text-zinc-800">{b.full_name}</span>
+                  <span className="text-zinc-500 text-xs">
+                    <StatusBadge status={b.kyc_status} />
+                  </span>
                 </li>
               ))}
-              {uboDocs.length === 0 && (
+              {(co.beneficial_owners ?? []).length === 0 && (
                 <li className="px-3 py-3 text-orange-900/70">Aún no hay beneficiarios finales registrados.</li>
               )}
             </ul>
@@ -512,61 +565,91 @@ export function ClientDetailPage() {
 
       {tab === "kyc" && co && (
         <div className="f-panel mt-4 space-y-4 w-full min-w-0 max-w-none">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-sm text-zinc-600">Estado actual:</span>
-            <StatusBadge status={co.kyc_status} />
+          <div className="space-y-2">
+            <label className="text-xs text-zinc-500">Beneficiario final (KYC por persona)</label>
+            <select
+              className="f-input max-w-md text-sm"
+              value={kycBoId ?? ""}
+              onChange={(e) => setKycBoId(e.target.value ? Number(e.target.value) : null)}
+            >
+              {(co.beneficial_owners ?? []).length === 0 && <option value="">— Sin beneficiarios —</option>}
+              {(co.beneficial_owners ?? []).map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.full_name}
+                </option>
+              ))}
+            </select>
           </div>
-          {co.kyc_notes && (
-            <p className="text-sm text-amber-900 bg-amber-50 rounded-lg p-3 border border-amber-100">Nota: {co.kyc_notes}</p>
-          )}
-          <div className="border border-zinc-200 rounded-xl p-4 bg-zinc-50/80 space-y-3 w-full min-w-0">
-            <h3 className="text-sm font-semibold text-zinc-800">Consulta en listas (proveedor externo)</h3>
-            <p className="text-xs text-zinc-600 leading-relaxed">
-              Las búsquedas se harán sobre los <strong>beneficiarios finales</strong> registrados en la pestaña
-              Documentación. Use el botón para registrar una solicitud; cuando exista integración, el proveedor
-              devolverá el resultado aquí.
-            </p>
-            <button type="button" className="f-btn-primary text-xs" disabled={busy} onClick={() => void requestScreening()}>
-              Solicitar consulta KYC en proveedor externo
-            </button>
-            {co.kyc_screening?.last_message && (
-              <p className="text-xs text-zinc-700 bg-white rounded-lg p-3 border border-zinc-200">{co.kyc_screening.last_message}</p>
-            )}
-            {co.kyc_screening?.last_request_reference && (
-              <p className="text-[11px] font-mono text-zinc-500">Ref. interna: {co.kyc_screening.last_request_reference}</p>
-            )}
-            {co.kyc_screening?.requests && co.kyc_screening.requests.length > 0 && (
-              <details className="text-xs">
-                <summary className="cursor-pointer text-orange-700 font-medium">Historial de solicitudes</summary>
-                <pre className="mt-2 p-3 bg-zinc-900 text-zinc-100 rounded-lg overflow-x-auto text-[11px]">
-                  {JSON.stringify(co.kyc_screening.requests, null, 2)}
-                </pre>
-              </details>
-            )}
-          </div>
-          <div className="border-t border-zinc-200 pt-4 space-y-3 w-full min-w-0">
-            <h3 className="text-sm font-semibold text-zinc-800">Revisión manual Finecta</h3>
-            <div className="flex flex-wrap gap-2">
-              {co.kyc_status !== "approved" && co.kyc_status !== "rejected" && (
-                <>
-                  <button type="button" className="f-btn-primary text-xs bg-emerald-600 hover:bg-emerald-700" disabled={busy} onClick={() => void setKycStatus("approved")}>
-                    Aprobar KYC
-                  </button>
-                  <div className="w-full min-w-0 max-w-md flex flex-col gap-2 sm:flex-row sm:items-end">
-                    <input
-                      className="f-input flex-1 text-sm"
-                      placeholder="Motivo si rechaza…"
-                      value={rejectNotes}
-                      onChange={(e) => setRejectNotes(e.target.value)}
-                    />
-                    <button type="button" className="f-btn-ghost text-xs text-red-700 border border-red-200" disabled={busy} onClick={() => void setKycStatus("rejected")}>
-                      Rechazar
-                    </button>
-                  </div>
-                </>
+          {selectedBo ? (
+            <>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm text-zinc-600">Estado KYC del beneficiario:</span>
+                <StatusBadge status={selectedBo.kyc_status} />
+              </div>
+              {selectedBo.kyc_notes && (
+                <p className="text-sm text-amber-900 bg-amber-50 rounded-lg p-3 border border-amber-100">Nota: {selectedBo.kyc_notes}</p>
               )}
-            </div>
-          </div>
+              <div className="border border-zinc-200 rounded-xl p-4 bg-zinc-50/80 space-y-3 w-full min-w-0">
+                <h3 className="text-sm font-semibold text-zinc-800">Consulta en listas (proveedor externo)</h3>
+                <p className="text-xs text-zinc-600 leading-relaxed">
+                  La solicitud se registra para el <strong>beneficiario seleccionado</strong>. Cuando exista integración,
+                  el proveedor devolverá el resultado aquí.
+                </p>
+                <button type="button" className="f-btn-primary text-xs" disabled={busy || kycBoId == null} onClick={() => void requestScreening()}>
+                  Solicitar consulta KYC en proveedor externo
+                </button>
+                {selectedBo.kyc_screening?.last_message && (
+                  <p className="text-xs text-zinc-700 bg-white rounded-lg p-3 border border-zinc-200">{selectedBo.kyc_screening.last_message}</p>
+                )}
+                {selectedBo.kyc_screening?.last_request_reference && (
+                  <p className="text-[11px] font-mono text-zinc-500">Ref. interna: {selectedBo.kyc_screening.last_request_reference}</p>
+                )}
+                {selectedBo.kyc_screening?.requests && selectedBo.kyc_screening.requests.length > 0 && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-orange-700 font-medium">Historial de solicitudes</summary>
+                    <pre className="mt-2 p-3 bg-zinc-900 text-zinc-100 rounded-lg overflow-x-auto text-[11px]">
+                      {JSON.stringify(selectedBo.kyc_screening.requests, null, 2)}
+                    </pre>
+                  </details>
+                )}
+              </div>
+              <div className="border-t border-zinc-200 pt-4 space-y-3 w-full min-w-0">
+                <h3 className="text-sm font-semibold text-zinc-800">Revisión manual Finecta</h3>
+                <div className="flex flex-wrap gap-2">
+                  {selectedBo.kyc_status !== "approved" && selectedBo.kyc_status !== "rejected" && (
+                    <>
+                      <button
+                        type="button"
+                        className="f-btn-primary text-xs bg-emerald-600 hover:bg-emerald-700"
+                        disabled={busy}
+                        onClick={() => void setKycStatus("approved")}
+                      >
+                        Aprobar KYC
+                      </button>
+                      <div className="w-full min-w-0 max-w-md flex flex-col gap-2 sm:flex-row sm:items-end">
+                        <input
+                          className="f-input flex-1 text-sm"
+                          placeholder="Motivo si rechaza…"
+                          value={rejectNotes}
+                          onChange={(e) => setRejectNotes(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="f-btn-ghost text-xs text-red-700 border border-red-200"
+                          disabled={busy}
+                          onClick={() => void setKycStatus("rejected")}
+                        >
+                          Rechazar
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-zinc-500">Registre al menos un beneficiario final en Documentación para gestionar KYC.</p>
+          )}
         </div>
       )}
     </div>

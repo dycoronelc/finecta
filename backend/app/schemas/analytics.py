@@ -7,8 +7,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class CompanyVolumeOut(BaseModel):
-    company_id: int
+class ClientVolumeOut(BaseModel):
+    client_id: int
     legal_name: str
     invoice_count: int
     total_amount: str
@@ -60,13 +60,13 @@ class ClusterPointOut(BaseModel):
 
 class PortfolioAnalyticsOut(BaseModel):
     has_data: bool = True
-    scope: str  # "platform" | "company"
-    company_id: int | None = None
+    scope: str  # "platform" | "client"
+    client_id: int | None = None
     summary: dict[str, Any] = Field(
         default_factory=dict,
         description="Facturas, emisores únicos, monto promedio, rango de fechas",
     )
-    volume_by_company: list[CompanyVolumeOut] = []
+    volume_by_client: list[ClientVolumeOut] = []
     monthly_trend: list[MonthlyPointOut] = []
     top_issuers: list[IssuerBarOut] = []
     rfm_issuers: list[RfmIssuerOut] = []

@@ -4,11 +4,19 @@ import { useAuth } from "../context/AuthContext";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { FilePicker } from "../components/ui/FilePicker";
 
-type Company = {
+type BeneficialOwnerRow = {
   id: number;
-  legal_name: string;
+  full_name: string;
+  national_id: string | null;
   kyc_status: string;
   kyc_notes: string | null;
+};
+
+type ClientMine = {
+  id: number;
+  legal_name: string;
+  kyc_summary: string | null;
+  beneficial_owners: BeneficialOwnerRow[];
 };
 
 type Doc = {
@@ -19,41 +27,39 @@ type Doc = {
   uploaded_at: string;
 };
 
-function hasUboRegistered(docs: Doc[]): boolean {
-  return docs.some((d) => d.document_type === "ubo_identidad" && (d.party_name || "").trim().length > 0);
-}
-
 export function OnboardingPage() {
   const { user, refreshMe } = useAuth();
-  const [co, setCo] = useState<Company | null>(null);
+  const [co, setCo] = useState<ClientMine | null>(null);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [step, setStep] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [uboName, setUboName] = useState("");
+  const [uboNationalId, setUboNationalId] = useState("");
   const [uboFile, setUboFile] = useState<File | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  async function reloadDocs(companyId: number) {
-    const d = await api<Doc[]>(`/companies/${companyId}/documents`);
+  async function reloadDocs(clientId: number) {
+    const d = await api<Doc[]>(`/clients/${clientId}/documents`);
     setDocs(d);
   }
 
+  async function reloadClient() {
+    const c = await api<ClientMine>("/clients/mine");
+    setCo(c);
+    await reloadDocs(c.id);
+  }
+
   useEffect(() => {
-    if (!user?.company_id) return;
-    api<Company>("/companies/mine")
-      .then((c) => {
-        setCo(c);
-        return reloadDocs(c.id);
-      })
-      .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
-  }, [user?.company_id]);
+    if (!user?.client_id) return;
+    reloadClient().catch((e) => setErr(e instanceof Error ? e.message : "Error"));
+  }, [user?.client_id]);
 
   async function submitForReview() {
     if (!co) return;
     setErr(null);
     try {
-      const updated = await api<Company>("/companies/mine/submit-for-review", { method: "POST" });
-      setCo(updated);
+      await api<ClientMine>("/clients/mine/submit-for-review", { method: "POST" });
+      await reloadClient();
       await refreshMe();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error");
@@ -67,9 +73,9 @@ export function OnboardingPage() {
     fd.append("file", file);
     fd.append("document_type", "rnc");
     try {
-      await api(`/companies/${co.id}/documents`, { method: "POST", formData: fd });
+      await api(`/clients/${co.id}/documents`, { method: "POST", formData: fd });
       setFile(null);
-      await reloadDocs(co.id);
+      await reloadClient();
       await refreshMe();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error al subir");
@@ -82,30 +88,35 @@ export function OnboardingPage() {
       return;
     }
     setErr(null);
-    const fd = new FormData();
-    fd.append("file", uboFile);
-    fd.append("document_type", "ubo_identidad");
-    fd.append("party_name", uboName.trim());
     try {
-      await api(`/companies/${co.id}/documents`, { method: "POST", formData: fd });
+      const bo = await api<BeneficialOwnerRow>(`/clients/${co.id}/beneficial-owners`, {
+        method: "POST",
+        json: { full_name: uboName.trim(), national_id: uboNationalId.trim() || null },
+      });
+      const fd = new FormData();
+      fd.append("file", uboFile);
+      fd.append("document_type", "identity");
+      await api(`/clients/${co.id}/beneficial-owners/${bo.id}/documents`, { method: "POST", formData: fd });
       setUboFile(null);
       setUboName("");
-      await reloadDocs(co.id);
+      setUboNationalId("");
+      await reloadClient();
       await refreshMe();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error al subir");
     }
   }
 
-  if (!user?.company_id) {
+  if (!user?.client_id) {
     return (
       <p className="text-sm text-zinc-500 w-full min-w-0">
-        Sin empresa vinculada. Inicie el registro desde <a className="text-orange-600" href="/registro">aquí</a>.
+        Sin cliente vinculado. Inicie el registro desde <a className="text-orange-600" href="/registro">aquí</a>.
       </p>
     );
   }
 
-  const uboOk = hasUboRegistered(docs);
+  const uboOk = (co?.beneficial_owners?.length ?? 0) >= 1;
+  const showSubmit = uboOk && (co?.beneficial_owners ?? []).some((b) => b.kyc_status === "draft");
 
   return (
     <div className="f-page w-full min-w-0">
@@ -133,7 +144,8 @@ export function OnboardingPage() {
             <span className="text-zinc-500">Razón social</span> — {co.legal_name}
           </p>
           <p>
-            <span className="text-zinc-500">Estado KYC</span> — <StatusBadge status={co.kyc_status} />
+            <span className="text-zinc-500">Resumen KYC (beneficiarios finales)</span> —{" "}
+            <StatusBadge status={co.kyc_summary ?? "draft"} />
           </p>
         </div>
       )}
@@ -152,6 +164,12 @@ export function OnboardingPage() {
               value={uboName}
               onChange={(e) => setUboName(e.target.value)}
             />
+            <input
+              className="f-input w-full max-w-md bg-white font-mono text-sm"
+              placeholder="Cédula / ID (opcional)"
+              value={uboNationalId}
+              onChange={(e) => setUboNationalId(e.target.value)}
+            />
             <FilePicker
               accept="image/*,application/pdf"
               value={uboFile}
@@ -168,15 +186,15 @@ export function OnboardingPage() {
               Registrar beneficiario final
             </button>
             <ul className="text-sm divide-y divide-orange-100 border border-orange-100 rounded-lg bg-white">
-              {docs
-                .filter((d) => d.document_type === "ubo_identidad")
-                .map((d) => (
-                  <li key={d.id} className="px-3 py-2 flex justify-between gap-2">
-                    <span className="font-medium text-zinc-800">{d.party_name || "—"}</span>
-                    <span className="text-zinc-400 text-xs truncate">{d.original_name}</span>
-                  </li>
-                ))}
-              {!docs.some((d) => d.document_type === "ubo_identidad") && (
+              {(co.beneficial_owners ?? []).map((b) => (
+                <li key={b.id} className="px-3 py-2 flex justify-between gap-2">
+                  <span className="font-medium text-zinc-800">{b.full_name}</span>
+                  <span className="text-zinc-400 text-xs">
+                    <StatusBadge status={b.kyc_status} />
+                  </span>
+                </li>
+              ))}
+              {(co.beneficial_owners ?? []).length === 0 && (
                 <li className="px-3 py-3 text-orange-900/70">Sin beneficiarios finales aún.</li>
               )}
             </ul>
@@ -203,13 +221,7 @@ export function OnboardingPage() {
           <ul className="divide-y divide-zinc-100 text-sm border border-zinc-100 rounded-lg">
             {docs.map((d) => (
               <li key={d.id} className="py-2 px-3 flex justify-between gap-2">
-                <span className="truncate">
-                  {d.document_type === "ubo_identidad" && d.party_name ? (
-                    <span className="text-zinc-800">{d.party_name}</span>
-                  ) : (
-                    <span className="truncate">{d.original_name}</span>
-                  )}
-                </span>
+                <span className="truncate">{d.original_name}</span>
                 <span className="text-zinc-400 text-xs shrink-0">{d.document_type}</span>
               </li>
             ))}
@@ -221,17 +233,19 @@ export function OnboardingPage() {
       {co && step === 2 && (
         <div className="f-panel text-sm text-zinc-700 space-y-3">
           <p>El equipo de Finecta revisará su expediente. El requisito principal del KYC es tener registrados los beneficiarios finales a investigar.</p>
-          {co.kyc_status === "draft" && uboOk && (
+          {showSubmit && (
             <button type="button" className="f-btn-primary text-xs" onClick={() => void submitForReview()}>
               Enviar expediente a revisión
             </button>
           )}
-          {co.kyc_status === "draft" && !uboOk && (
+          {!uboOk && (
             <p className="text-zinc-500 text-xs">
               En el paso <strong>Documentos</strong> registre al menos un beneficiario final con nombre completo e identificación antes de enviar a revisión KYC.
             </p>
           )}
-          {co.kyc_notes && <p className="text-amber-800 bg-amber-50 rounded-lg p-3">Nota: {co.kyc_notes}</p>}
+          {uboOk && !showSubmit && (
+            <p className="text-zinc-500 text-xs">El expediente ya fue enviado o los beneficiarios no están en borrador.</p>
+          )}
         </div>
       )}
     </div>
