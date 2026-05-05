@@ -329,24 +329,87 @@ export function ClientDetailPage() {
             <div className="f-panel w-full min-w-0">
               <h2 className="text-base font-semibold text-zinc-900">Documentos obligatorios del expediente</h2>
               <p className="text-xs text-zinc-500 mt-1 mb-3">
-                Esta lista resume los archivos mínimos que debe cargar el cliente para revisión.
+                Cargue aquí los archivos mínimos del expediente societario y legal.
               </p>
-              <ul className="space-y-2 text-sm text-zinc-700">
-                <li className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">Certificado de Registro Mercantil</li>
-                <li className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">RNC</li>
-                <li className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">Acta de asamblea (representante legal y atribuciones)</li>
-                <li className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">Cédula o pasaporte del representante legal</li>
-              </ul>
+              {!co ? (
+                <p className="text-sm text-zinc-500">Guarde primero los datos del cliente para habilitar la carga.</p>
+              ) : (
+                <div className="space-y-4">
+                  {EXPEDIENTE_DOCS.map((spec) => (
+                    <DocRow
+                      key={`general-${spec.type}`}
+                      label={spec.label}
+                      docType={`general-${spec.type}`}
+                      items={docsByType(spec.type)}
+                      busy={busy}
+                      onUpload={async (f) => {
+                        await uploadDocType(spec.type, f);
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
             <div className="f-panel w-full min-w-0">
               <h2 className="text-base font-semibold text-zinc-900">Beneficiarios finales</h2>
               <p className="text-sm text-zinc-700 mt-1 leading-relaxed">
-                Debe solicitarse por <strong>cada beneficiario final</strong> (pueden ser varios):
+                Debe solicitarse por <strong>cada beneficiario final</strong>:
               </p>
-              <ul className="mt-3 space-y-2 text-sm text-zinc-700">
-                <li className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2">Nombre completo</li>
-                <li className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2">Documento de identidad (cédula o pasaporte)</li>
-              </ul>
+              {!co ? (
+                <p className="text-sm text-zinc-500 mt-3">Guarde primero los datos del cliente para registrar beneficiarios.</p>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  <input
+                    className="f-input w-full"
+                    placeholder="Nombre completo"
+                    value={uboName}
+                    onChange={(e) => setUboName(e.target.value)}
+                  />
+                  <FilePicker
+                    accept="image/*,application/pdf"
+                    value={uboFile}
+                    onFileChange={setUboFile}
+                    buttonLabel="Documento de identidad"
+                    name="ubo-general"
+                  />
+                  <button
+                    type="button"
+                    className="f-btn-primary text-xs"
+                    disabled={busy || !uboFile || !uboName.trim()}
+                    onClick={() => void uploadUbo()}
+                  >
+                    Agregar
+                  </button>
+
+                  <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-zinc-50 text-zinc-600">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">Nombre completo</th>
+                          <th className="px-3 py-2 text-left font-medium">Documento de identidad</th>
+                          <th className="px-3 py-2 text-left font-medium">Fecha</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {uboDocs.map((d) => (
+                          <tr key={d.id} className="border-t border-zinc-100">
+                            <td className="px-3 py-2">{d.party_name || "—"}</td>
+                            <td className="px-3 py-2">{d.original_name}</td>
+                            <td className="px-3 py-2 text-zinc-500">{d.uploaded_at?.slice(0, 10)}</td>
+                          </tr>
+                        ))}
+                        {uboDocs.length === 0 && (
+                          <tr>
+                            <td className="px-3 py-3 text-zinc-500" colSpan={3}>
+                              Aún no hay beneficiarios registrados.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
