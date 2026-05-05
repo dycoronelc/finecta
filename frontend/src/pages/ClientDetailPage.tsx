@@ -146,8 +146,13 @@ export function ClientDetailPage() {
         nav(`/app/clientes/${c.id}`, { replace: true });
         return;
       }
-      if (!co) return;
-      const c = await api<Company>(`/companies/${co.id}`, {
+      const routeCompanyId = id ? Number(id) : NaN;
+      const companyId = co?.id ?? (Number.isNaN(routeCompanyId) ? null : routeCompanyId);
+      if (!companyId) {
+        setErr("No se pudo identificar el cliente para guardar cambios.");
+        return;
+      }
+      const c = await api<Company>(`/companies/${companyId}`, {
         method: "PATCH",
         json: {
           legal_name: legal_name.trim(),
